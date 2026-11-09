@@ -55,7 +55,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-evidence" | Out-Null
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-build" | Out-Null
-      - name: Build the Windows x64 desktop app and run portable unit checks
+      - name: Build the Windows x64 desktop app
         shell: cmd
         run: |
           @echo off
@@ -67,11 +67,19 @@ jobs:
           node desktop/build.mjs --target win32-x64 --out "%RUNNER_TEMP%\sec-hub-msix-build\desktop" --cache "%RUNNER_TEMP%\sec-hub-msix-build\cache" > "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-build.log" 2>&1
           set "SEC_HUB_BUILD_STATUS=%ERRORLEVEL%"
           type "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-build.log"
-          if not "%SEC_HUB_BUILD_STATUS%"=="0" exit /b %SEC_HUB_BUILD_STATUS%
-          node --test desktop/test/*.test.mjs > "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-unit-tests.log" 2>&1
-          set "SEC_HUB_TEST_STATUS=%ERRORLEVEL%"
-          type "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-unit-tests.log"
-          exit /b %SEC_HUB_TEST_STATUS%
+          exit /b %SEC_HUB_BUILD_STATUS%
+      - name: Run desktop tests with the packaged Windows helper
+        shell: pwsh
+        run: |
+          $helper = 'src/native/windows-safe-io.exe'
+          if (Test-Path -LiteralPath $helper) { throw 'Unexpected Windows helper in the checkout' }
+          Copy-Item -LiteralPath "$env:RUNNER_TEMP/sec-hub-msix-build/desktop/package/Sec Hub/resources/core/src/native/windows-safe-io.exe" -Destination $helper
+          try {
+            node --test desktop/test/*.test.mjs 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/sec-hub-msix-evidence/desktop-unit-tests.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item -LiteralPath $helper -Force
+          }
       - name: Build the disposable CI identity MSIX package
         shell: pwsh
         run: |
