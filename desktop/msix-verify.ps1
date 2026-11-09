@@ -98,13 +98,16 @@ try {
   $smokePath = Join-Path $env:USERPROFILE "sec-hub-msix-smoke-$([Guid]::NewGuid().ToString('N'))"
   $smokeEvidencePath = Join-Path $evidence 'packaged-smoke'
   New-Item -ItemType Directory -Path $smokePath | Out-Null
+  $previousScreenshotFlag = $env:SEC_HUB_MSIX_STORE_SCREENSHOT
   try {
     Push-Location $repoRoot
     try {
+      $env:SEC_HUB_MSIX_STORE_SCREENSHOT = '1'
       & node desktop/smoke.mjs --executable $executable --out $smokePath 2>&1 |
         Tee-Object -FilePath (Join-Path $evidence 'packaged-smoke.log')
       if ($LASTEXITCODE -ne 0) { throw "The installed MSIX app failed its packaged scan and report smoke test ($LASTEXITCODE)" }
     } finally {
+      $env:SEC_HUB_MSIX_STORE_SCREENSHOT = $previousScreenshotFlag
       Pop-Location
     }
   } finally {
@@ -113,7 +116,9 @@ try {
       ForEach-Object { Join-Path $smokePath $_ }
     $smokeSummaries = Get-ChildItem -LiteralPath $smokePath -Directory -Filter 'private-smoke-*' -Attributes !ReparsePoint |
       ForEach-Object { Join-Path $_.FullName 'summary.json' }
-    foreach ($source in @($smokeFiles) + @($smokeSummaries)) {
+    $smokeScreenshots = Get-ChildItem -LiteralPath $smokePath -Directory -Filter 'private-smoke-*' -Attributes !ReparsePoint |
+      ForEach-Object { Join-Path $_.FullName 'store-listing-screenshot.png' }
+    foreach ($source in @($smokeFiles) + @($smokeSummaries) + @($smokeScreenshots)) {
       $file = Get-Item -LiteralPath $source -ErrorAction SilentlyContinue
       if ($file -and -not $file.PSIsContainer -and -not ($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         Copy-Item -LiteralPath $file.FullName -Destination $smokeEvidencePath
@@ -123,6 +128,7 @@ try {
   }
 
   $smokeFile = Join-Path $smokeEvidencePath 'smoke-evidence.json'
+  $screenshotFile = Join-Path $smokeEvidencePath 'store-listing-screenshot.png'
   $smoke = Get-Content -LiteralPath $smokeFile -Raw | ConvertFrom-Json
   $summary = $smoke.summary
   if ($smoke.status -ne 'passed' -or $summary.status -ne 'passed' -or
@@ -131,6 +137,19 @@ try {
       -not $summary.nativeScan.recommendationVisible -or
       -not $summary.savedRecommendations.fixedVersion -or -not $summary.savedRecommendations.suggestion) {
     throw 'The installed app did not complete the expected Windows OSV scan and report checks'
+  }
+  if (-not $summary.storeListingScreenshot.captured -or
+      $summary.storeListingScreenshot.filename -cne 'store-listing-screenshot.png' -or
+      -not (Test-Path -LiteralPath $screenshotFile -PathType Leaf)) {
+    throw 'The installed app did not capture the requested Store listing screenshot'
+  }
+  $screenshotBytes = [System.IO.File]::ReadAllBytes($screenshotFile)
+  if ($screenshotBytes.Length -lt 24 -or $screenshotBytes.Length -gt 50MB -or
+      $screenshotBytes[0] -ne 137 -or $screenshotBytes[1] -ne 80 -or
+      $screenshotBytes[2] -ne 78 -or $screenshotBytes[3] -ne 71 -or
+      [System.Net.IPAddress]::NetworkToHostOrder([BitConverter]::ToInt32($screenshotBytes, 16)) -lt 1366 -or
+      [System.Net.IPAddress]::NetworkToHostOrder([BitConverter]::ToInt32($screenshotBytes, 20)) -lt 768) {
+    throw 'The Store listing screenshot is not a valid PNG with the required minimum dimensions'
   }
 
   [pscustomobject]@{

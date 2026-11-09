@@ -28,6 +28,9 @@ export function portClosed(url) {
 
 // Called only after main validates the explicit flag AND private harness directory.
 export async function runPackagedSmoke({ directory, window, controller, actions, selectFolder, domLoaded, secondInstance, closeWindow, urls }) {
+  const captureStoreListingScreenshot = process.platform === 'win32'
+    && process.windowsStore === true
+    && process.env.SEC_HUB_MSIX_STORE_SCREENSHOT === '1';
   const summary = {
     status: 'failed',
     runtime: { electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: process.arch, windowsStore: process.windowsStore === true },
@@ -227,6 +230,26 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     summary.nativeScan = { ...summary.nativeScan, state: job.state, errorCode: job.errorCode, runStatus: job.runStatus, reportsReady: job.reportsReady, artifactId, browserStatus, tools, combinedFinding, recommendationVisible, storeReportOnDisk };
     summary.checks.nativeScan = job.state === 'completed' && job.runStatus === 'completed' && job.reportsReady
       && tools.osv === 'completed' && tools.php2shell === 'completed' && combinedFinding && recommendationVisible && browserStatus === 404 && storeReportOnDisk;
+    if (captureStoreListingScreenshot) {
+      if (!summary.checks.nativeScan) throw Error('store_screenshot_requires_completed_native_scan');
+      const originalSize = window.getContentSize();
+      try {
+        // Store screenshot diagnostics use only the controlled fixture above. Make the
+        // rendered app viewport large enough for the listing requirement, then restore it.
+        window.setContentSize(Math.max(1366, originalSize[0]), Math.max(768, originalSize[1]));
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const screenshot = await window.webContents.capturePage();
+        const dimensions = screenshot.getSize();
+        if (dimensions.width < 1366 || dimensions.height < 768) throw Error('store_screenshot_dimensions_too_small');
+        const bytes = screenshot.toPNG();
+        if (bytes.length === 0 || bytes.length > 50 * 1024 * 1024) throw Error('store_screenshot_size_invalid');
+        const screenshotPath = path.join(directory, 'store-listing-screenshot.png');
+        await fs.writeFile(screenshotPath, bytes, { flag: 'wx', mode: 0o600 });
+        summary.storeListingScreenshot = { captured: true, filename: path.basename(screenshotPath), ...dimensions, bytes: bytes.length };
+      } finally {
+        window.setContentSize(originalSize[0], originalSize[1]);
+      }
+    }
     const secondEvent = secondInstance();
     secondary = spawn(process.execPath, ['--sec-hub-smoke', '--sec-hub-smoke-secondary'], { env: process.env, stdio: 'ignore', windowsHide: true });
     secondaryExit = new Promise((resolve, reject) => {
