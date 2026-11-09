@@ -94,7 +94,15 @@ try {
     throw 'The registered executable is missing from the installed package location'
   }
 
-  $smokePath = Join-Path $env:TEMP "sec-hub-msix-smoke-$([Guid]::NewGuid().ToString('N'))"
+  $appDataPath = Join-Path $env:USERPROFILE 'AppData'
+  $appDataAcl = (Get-Acl -LiteralPath $appDataPath).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+  [pscustomobject]@{
+    packageFamilyName = $installedPackage.PackageFamilyName
+    rules = @($appDataAcl | Select-Object @{Name='sid'; Expression={$_.IdentityReference.Value}}, FileSystemRights, AccessControlType, InheritanceFlags, PropagationFlags, IsInherited)
+  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'appdata-acl.json') -Encoding utf8
+
+  # A selected project is external to package-private AppData on a clean user profile.
+  $smokePath = Join-Path $env:USERPROFILE "sec-hub-msix-smoke-$([Guid]::NewGuid().ToString('N'))"
   $smokeEvidencePath = Join-Path $evidence 'packaged-smoke'
   New-Item -ItemType Directory -Path $smokePath | Out-Null
   try {
