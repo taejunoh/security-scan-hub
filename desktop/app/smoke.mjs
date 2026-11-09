@@ -155,9 +155,21 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     window.focus();
     const initialState = await invoke('window.secHubDesktop.getState()');
     const withoutGesture = await invoke('window.secHubDesktop.chooseFolder()');
+    summary.projectSelection = {
+      focused: window.isFocused(),
+      withoutGesture: withoutGesture.error?.code,
+      scannerSelectable: initialState.tools?.find(({ id }) => id === 'osv')?.selectable,
+    };
     await waitFor(() => invoke("!document.getElementById('desktop-choose-folder').disabled"), 5000, 'scan_controls_unavailable');
     await click('desktop-choose-folder');
-    const chosen = await waitFor(() => invoke("document.getElementById('desktop-folder').textContent === 'controlled-project'"), 5000, 'project_selection_failed');
+    const chosen = await waitFor(async () => {
+      const state = await invoke(`({
+        selected: document.getElementById('desktop-folder').textContent === 'controlled-project',
+        status: document.getElementById('execution-status').textContent,
+      })`);
+      summary.projectSelection = { ...summary.projectSelection, ...state };
+      return state.selected;
+    }, 5000, 'project_selection_failed');
     const injected = await invoke("window.secHubDesktop.startScan({ toolIds: ['osv'], aiConsent: false, path: '/arbitrary' })", true);
     const phpUrl = 'http://127.0.0.1:8080/';
     const checker = path.join(directory, 'phpcheck.js');

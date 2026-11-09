@@ -213,7 +213,10 @@ if (!hasLock) {
           return result;
         },
       });
-    } catch { /* An unsafe/unavailable output root must not disable saved results viewing. */ }
+    } catch (error) {
+      // An unsafe output root must not disable saved results viewing.
+      if (smokeDir) console.error('Desktop scan initialization failed:', error);
+    }
     const unavailable = { error: { code: 'execution_unavailable' } };
     const channelArities = { getState: 0, chooseFolder: 0, chooseConfig: 0, chooseNode: 0, startScan: 1, getJob: 0, cancelScan: 0, refreshResults: 0, openSetup: 2 };
     const focusedActions = new Set(['chooseFolder', 'chooseConfig', 'chooseNode', 'startScan', 'openSetup']);
