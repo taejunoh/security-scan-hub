@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 const policy = await import('../app/policy.mjs').catch(() => ({}));
 
 test('only the exact owned loopback origin can load or open in the browser', () => {
@@ -20,8 +21,10 @@ test('unowned or malformed server URLs never establish trust', () => {
 
 test('only Store installations use the protected home scan-results directory', () => {
   assert.equal(typeof policy.scanResultsPath, 'function', 'scan-results path policy must exist');
-  assert.equal(policy.scanResultsPath({ windowsStore: true, home: '/user/home', userData: '/user/home/AppData/Roaming/Sec Hub' }), '/user/home/.security-scan-hub/scan-results');
-  assert.equal(policy.scanResultsPath({ windowsStore: false, home: '/user/home', userData: '/user/home/AppData/Roaming/Sec Hub' }), '/user/home/AppData/Roaming/Sec Hub/scan-results');
+  const home = path.resolve('/user/home');
+  const userData = path.join(home, 'AppData', 'Roaming', 'Sec Hub');
+  assert.equal(policy.scanResultsPath({ windowsStore: true, home, userData }), path.join(home, '.security-scan-hub', 'scan-results'));
+  assert.equal(policy.scanResultsPath({ windowsStore: false, home, userData }), path.join(userData, 'scan-results'));
 });
 
 test('the owned workbench can open canonical OSV advisory URLs only', () => {
