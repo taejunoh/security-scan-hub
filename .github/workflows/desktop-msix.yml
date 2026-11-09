@@ -1,0 +1,155 @@
+name: Desktop MSIX native Windows validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      store_identity_name:
+        description: Reserved Partner Center package identity Name (optional)
+        type: string
+        required: false
+      store_publisher:
+        description: Exact Partner Center Publisher distinguished name (optional)
+        type: string
+        required: false
+      store_publisher_display_name:
+        description: Publisher display name registered in Partner Center (optional)
+        type: string
+        required: false
+      store_display_name:
+        description: Store app display name (optional)
+        type: string
+        required: false
+  push:
+    branches:
+      - codex/windows-msix
+    paths:
+      - '.github/workflows/desktop-msix.yml'
+      - 'desktop/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-msix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-msix:
+    name: Install and scan from MSIX / Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          architecture: x64
+          package-manager-cache: false
+      - name: Prepare isolated output and verify native Windows x64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node -e "if(process.platform!=='win32'||process.arch!=='x64')process.exit(1)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-evidence" | Out-Null
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-build" | Out-Null
+      - name: Build the Windows x64 desktop app and run portable unit checks
+        shell: cmd
+        run: |
+          @echo off
+          set "SEC_HUB_VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "delims=" %%I in ('"%SEC_HUB_VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do set "SEC_HUB_VS=%%I"
+          if not defined SEC_HUB_VS exit /b 1
+          call "%SEC_HUB_VS%\Common7\Tools\VsDevCmd.bat" -no_logo -arch=x64 -host_arch=x64 || exit /b 1
+          cd /d "%GITHUB_WORKSPACE%" || exit /b 1
+          node desktop/build.mjs --target win32-x64 --out "%RUNNER_TEMP%\sec-hub-msix-build\desktop" --cache "%RUNNER_TEMP%\sec-hub-msix-build\cache" > "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-build.log" 2>&1
+          set "SEC_HUB_BUILD_STATUS=%ERRORLEVEL%"
+          type "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-build.log"
+          if not "%SEC_HUB_BUILD_STATUS%"=="0" exit /b %SEC_HUB_BUILD_STATUS%
+          node --test desktop/test/*.test.mjs > "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-unit-tests.log" 2>&1
+          set "SEC_HUB_TEST_STATUS=%ERRORLEVEL%"
+          type "%RUNNER_TEMP%\sec-hub-msix-evidence\desktop-unit-tests.log"
+          exit /b %SEC_HUB_TEST_STATUS%
+      - name: Build the disposable CI identity MSIX package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node desktop/msix/build.mjs `
+            --source "$env:RUNNER_TEMP/sec-hub-msix-build/desktop/package/Sec Hub" `
+            --out "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test" `
+            --identity-name 'SecurityScanHub.CI' `
+            --publisher 'CN=Security Scan Hub CI' `
+            --publisher-display-name 'Security Scan Hub CI' `
+            --display-name 'Security Scan Hub CI' `
+            --version '1.2.4.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Sign temporarily, install, register in Start and verify scan and report
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profileTemp = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
+          New-Item -ItemType Directory -Force -Path $profileTemp | Out-Null
+          $env:TEMP = (Resolve-Path -LiteralPath $profileTemp).ProviderPath
+          $env:TMP = $env:TEMP
+          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test" -Filter '*.msix' -File
+          if ($package.Count -ne 1) { throw 'Expected exactly one test MSIX package' }
+          $identity = Join-Path $package.DirectoryName 'msix-identity.json'
+          & "$env:GITHUB_WORKSPACE/desktop/msix-verify.ps1" `
+            -MsixPath $package.FullName `
+            -IdentityPath $identity `
+            -EvidencePath "$env:RUNNER_TEMP/sec-hub-msix-evidence/install" `
+            -ExpectedName 'SecurityScanHub.CI' `
+            -ExpectedPublisher 'CN=Security Scan Hub CI' `
+            -ExpectedPublisherDisplayName 'Security Scan Hub CI' `
+            -RepositoryRoot $env:GITHUB_WORKSPACE
+      - name: Build optional unsigned Store submission candidate
+        if: ${{ success() && (inputs.store_identity_name != '' || inputs.store_publisher != '' || inputs.store_publisher_display_name != '' || inputs.store_display_name != '') }}
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ inputs.store_identity_name }}
+          STORE_PUBLISHER: ${{ inputs.store_publisher }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ inputs.store_publisher_display_name }}
+          STORE_DISPLAY_NAME: ${{ inputs.store_display_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:STORE_IDENTITY_NAME) -or
+              [string]::IsNullOrWhiteSpace($env:STORE_PUBLISHER) -or
+              [string]::IsNullOrWhiteSpace($env:STORE_PUBLISHER_DISPLAY_NAME) -or
+              [string]::IsNullOrWhiteSpace($env:STORE_DISPLAY_NAME)) {
+            throw 'Provide all four Partner Center identity fields to build a Store candidate'
+          }
+          node desktop/msix/build.mjs `
+            --source "$env:RUNNER_TEMP/sec-hub-msix-build/desktop/package/Sec Hub" `
+            --out "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate" `
+            --identity-name $env:STORE_IDENTITY_NAME `
+            --publisher $env:STORE_PUBLISHER `
+            --publisher-display-name $env:STORE_PUBLISHER_DISPLAY_NAME `
+            --display-name $env:STORE_DISPLAY_NAME `
+            --version '1.2.4.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $testMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test/msix-identity.json" -Raw | ConvertFrom-Json
+          $storeMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate/msix-identity.json" -Raw | ConvertFrom-Json
+          if ($testMetadata.payloadSha256 -cne $storeMetadata.payloadSha256) {
+            throw 'Store candidate payload differs from the natively validated Windows app'
+          }
+      - name: Preserve Windows installation and scan evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-msix-ci-evidence-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/sec-hub-msix-evidence
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve unsigned Store submission candidate
+        if: ${{ success() && (inputs.store_identity_name != '' && inputs.store_publisher != '' && inputs.store_publisher_display_name != '' && inputs.store_display_name != '') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-msix-store-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/sec-hub-msix-build/store-candidate/*.msix
+            ${{ runner.temp }}/sec-hub-msix-build/store-candidate/msix-identity.json
+          if-no-files-found: error
+          retention-days: 7
