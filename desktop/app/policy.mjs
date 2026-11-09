@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 // Only a server URL returned by the main-process controller establishes trust.
 function ownedOrigin(value) {
   if (typeof value !== 'string' || !/^http:\/\/127\.0\.0\.1:[1-9][0-9]*\/$/.test(value)) return null;
@@ -30,4 +32,9 @@ export function isTrustedSender(event, contents, session, activeUrl) {
   if (!contents || contents.isDestroyed() || event.sender !== contents || contents.session !== session) return false;
   const frame = event.senderFrame;
   return Boolean(frame && frame === contents.mainFrame && frame.url === activeUrl && isOwnedUrl(frame.url, activeUrl));
+}
+
+export function scanResultsPath({ windowsStore, home, userData }) {
+  if (windowsStore) return path.join(home, '.security-scan-hub', 'scan-results');
+  return path.join(userData, 'scan-results');
 }

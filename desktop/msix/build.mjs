@@ -174,7 +174,7 @@ export async function buildMsix({ source, out, identityName, publisher, publishe
   catch { throw new Error('MSIX source does not contain Sec Hub.exe'); }
   const appVersion = JSON.parse(await readFile(path.join(repository, 'desktop/app/package.json'), 'utf8')).version;
   const [appMajor, appMinor, appPatch] = appVersion.split('.');
-  const expectedStoreVersion = `${Math.max(1, Number(appMajor))}.${appMinor}.${appPatch}.0`;
+  const expectedStoreVersion = `${Number(appMajor) + 1}.${appMinor}.${appPatch}.0`;
   if (version !== expectedStoreVersion) throw new Error(`MSIX version must map app version ${appVersion} to ${expectedStoreVersion}`);
   const inventory = await sourceInventory(actualSource);
   const payloadSha256 = createHash('sha256').update(`${JSON.stringify(inventory)}\n`).digest('hex');

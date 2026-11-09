@@ -85,7 +85,7 @@ if (!hasLock) {
     else requestQuit();
   }
   async function start() {
-    const [{ createViewerController, createNativeActions }, { advisoryBrowserUrl, isOwnedUrl, isTrustedSender }, { inspectDesktopTools }] = await Promise.all([
+    const [{ createViewerController, createNativeActions }, { advisoryBrowserUrl, isOwnedUrl, isTrustedSender, scanResultsPath }, { inspectDesktopTools }] = await Promise.all([
       import('./controller.mjs'), import('./policy.mjs'), import('./tools.mjs'),
     ]);
     const core = app.isPackaged ? path.join(process.resourcesPath, 'core') : path.resolve(__dirname, '..', '..');
@@ -94,7 +94,9 @@ if (!hasLock) {
     ));
     const trusted = (url) => isOwnedUrl(url, activeUrl);
     const desktopToken = randomBytes(32).toString('hex');
-    const runs = path.join(app.getPath('userData'), 'scan-results');
+    const windowsStore = process.windowsStore === true;
+    const home = windowsStore && smokeDir ? smokeDir : app.getPath('home');
+    const runs = scanResultsPath({ windowsStore, home, userData: app.getPath('userData') });
     const currentSession = session.fromPartition('sec-hub-desktop');
     currentSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     currentSession.setPermissionCheckHandler(() => false);

@@ -18,6 +18,12 @@ test('unowned or malformed server URLs never establish trust', () => {
   for (const own of [null, '', 'http://localhost:43123/', 'https://127.0.0.1:43123/', 'http://127.0.0.1:0/', 'http://127.0.0.1:65536/', 'http://127.0.0.1:43123/private', 'http://127.0.0.1:43123/#token']) assert.equal(policy.isOwnedUrl('http://127.0.0.1:43123/', own), false);
 });
 
+test('only Store installations use the protected home scan-results directory', () => {
+  assert.equal(typeof policy.scanResultsPath, 'function', 'scan-results path policy must exist');
+  assert.equal(policy.scanResultsPath({ windowsStore: true, home: '/user/home', userData: '/user/home/AppData/Roaming/Sec Hub' }), '/user/home/.security-scan-hub/scan-results');
+  assert.equal(policy.scanResultsPath({ windowsStore: false, home: '/user/home', userData: '/user/home/AppData/Roaming/Sec Hub' }), '/user/home/AppData/Roaming/Sec Hub/scan-results');
+});
+
 test('the owned workbench can open canonical OSV advisory URLs only', () => {
   const own = 'http://127.0.0.1:43123/';
   const advisory = 'https://osv.dev/vulnerability/GHSA-29mw-wpgm-hmr9';

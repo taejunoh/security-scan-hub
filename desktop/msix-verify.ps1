@@ -94,14 +94,7 @@ try {
     throw 'The registered executable is missing from the installed package location'
   }
 
-  $appDataPath = Join-Path $env:USERPROFILE 'AppData'
-  $appDataAcl = (Get-Acl -LiteralPath $appDataPath).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
-  [pscustomobject]@{
-    packageFamilyName = $installedPackage.PackageFamilyName
-    rules = @($appDataAcl | Select-Object @{Name='sid'; Expression={$_.IdentityReference.Value}}, FileSystemRights, AccessControlType, InheritanceFlags, PropagationFlags, IsInherited)
-  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'appdata-acl.json') -Encoding utf8
-
-  # A selected project is external to package-private AppData on a clean user profile.
+  # Keep test projects and reports outside virtualized AppData, as in the installed app.
   $smokePath = Join-Path $env:USERPROFILE "sec-hub-msix-smoke-$([Guid]::NewGuid().ToString('N'))"
   $smokeEvidencePath = Join-Path $evidence 'packaged-smoke'
   New-Item -ItemType Directory -Path $smokePath | Out-Null
@@ -133,8 +126,8 @@ try {
   $smoke = Get-Content -LiteralPath $smokeFile -Raw | ConvertFrom-Json
   $summary = $smoke.summary
   if ($smoke.status -ne 'passed' -or $summary.status -ne 'passed' -or
-      $summary.runtime.platform -ne 'win32' -or $summary.runtime.arch -ne 'x64' -or
-      $summary.nativeScan.tools.osv -ne 'completed' -or -not $summary.nativeScan.reportsReady -or
+      $summary.runtime.platform -ne 'win32' -or $summary.runtime.arch -ne 'x64' -or -not $summary.runtime.windowsStore -or
+      $summary.nativeScan.tools.osv -ne 'completed' -or -not $summary.nativeScan.reportsReady -or -not $summary.nativeScan.storeReportOnDisk -or
       -not $summary.nativeScan.recommendationVisible -or
       -not $summary.savedRecommendations.fixedVersion -or -not $summary.savedRecommendations.suggestion) {
     throw 'The installed app did not complete the expected Windows OSV scan and report checks'

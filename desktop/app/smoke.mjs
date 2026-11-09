@@ -30,7 +30,7 @@ export function portClosed(url) {
 export async function runPackagedSmoke({ directory, window, controller, actions, selectFolder, domLoaded, secondInstance, closeWindow, urls }) {
   const summary = {
     status: 'failed',
-    runtime: { electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: process.arch },
+    runtime: { electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: process.arch, windowsStore: process.windowsStore === true },
     checks: { rendererLoad: false, catalog: false, securityPreferences: false, folderSwitch: false, singleInstance: false, closedPort: false, executionUnavailable: false, nativeScan: false },
     urls,
   };
@@ -223,9 +223,10 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
       return Boolean(check?.includes('Check first') && check.includes('actual PHP version')
         && action?.includes('Recommended action') && action.includes('If the installation is affected'));
     })()`);
-    summary.nativeScan = { ...summary.nativeScan, state: job.state, errorCode: job.errorCode, runStatus: job.runStatus, reportsReady: job.reportsReady, artifactId, browserStatus, tools, combinedFinding, recommendationVisible };
+    const storeReportOnDisk = !summary.runtime.windowsStore || (await fs.stat(path.join(directory, '.security-scan-hub', 'scan-results', job.id, 'report.html')).catch(() => null))?.isFile() === true;
+    summary.nativeScan = { ...summary.nativeScan, state: job.state, errorCode: job.errorCode, runStatus: job.runStatus, reportsReady: job.reportsReady, artifactId, browserStatus, tools, combinedFinding, recommendationVisible, storeReportOnDisk };
     summary.checks.nativeScan = job.state === 'completed' && job.runStatus === 'completed' && job.reportsReady
-      && tools.osv === 'completed' && tools.php2shell === 'completed' && combinedFinding && recommendationVisible && browserStatus === 404;
+      && tools.osv === 'completed' && tools.php2shell === 'completed' && combinedFinding && recommendationVisible && browserStatus === 404 && storeReportOnDisk;
     const secondEvent = secondInstance();
     secondary = spawn(process.execPath, ['--sec-hub-smoke', '--sec-hub-smoke-secondary'], { env: process.env, stdio: 'ignore', windowsHide: true });
     secondaryExit = new Promise((resolve, reject) => {
