@@ -156,6 +156,29 @@ test('SkillSpector on Windows scans without file output and links findings to ca
   assert.equal(finding.rawRef, join(artifactDir, 'stdout.txt'));
 });
 
+test('only the Windows SkillSpector version probe gets a 30-second deadline', async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  t.after(() => Object.defineProperty(process, 'platform', platform));
+  const timer = t.mock.method(globalThis, 'setTimeout');
+  const command = { command: process.execPath, args: [
+    '-e', 'if (process.argv[1] === "--version") console.log("controlled version");', '--',
+  ] };
+  const config = { tools: { skillspector: command, osv: command } };
+
+  for (const [host, id, deadline] of [
+    ['win32', 'skillspector', 30_000],
+    ['win32', 'osv', 10_000],
+    ['linux', 'skillspector', 10_000],
+  ]) {
+    Object.defineProperty(process, 'platform', { value: host });
+    timer.mock.resetCalls();
+    assert.deepEqual(await getAdapter(id).check({ config }), {
+      available: true, version: 'controlled version',
+    });
+    assert.deepEqual(timer.mock.calls.map(call => call.arguments[1]), [deadline]);
+  }
+});
+
 test('SkillSpector clean and incomplete results are distinguished; valid partial findings retained', async () => {
   const data = await fixture('skillspector-positive');
   assert.deepEqual(await parse('skillspector', { ...data, issues: [] }), []);
