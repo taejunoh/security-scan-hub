@@ -103,18 +103,22 @@ on macOS 15 on Intel.
 
 ### Install on Windows (x64)
 
-**Store rollout — November 10, 2026:** Certification has passed and publishing
-has started. The Store listing is live. If installation is not yet offered in
-your region, try again later or use the portable ZIP below.
+**Available now:** Install the published app directly from the Microsoft Store.
 
 1. On your Windows PC, open [Security Scan Hub in the Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
-2. Select **Get** or **Install**. Confirm that the app is **Security Scan Hub** by **All in Simple**.
+2. Select **Download**, **Get**, or **Install**. Confirm that the app is **Security Scan Hub** by **All in Simple**.
 3. Open **Security Scan Hub** from the Start menu, then follow [Run your first scan](#run-your-first-scan-with-024).
 
 The Store app supports Intel and AMD x64 PCs running Windows 10 version 2004
 or later, or Windows 11. OSV Scanner is included: you do not need a terminal,
 Node.js, or a separate OSV account for your first scan. Microsoft handles the
 Store package signature; you do not need to install a certificate.
+
+**Verified November 10, 2026:** Store installation, folder selection, a bundled
+OSV scan, and the results screen with recommended actions worked on Windows 11
+ARM in a virtual machine using x64 emulation. The saved HTML, JSON, and SARIF
+reports matched the scan results. This check covered OSV, not every integration
+or native Intel/AMD hardware.
 
 Up to five integrations are available after setup. The Cloudflare and
 Anthropic workflows are disabled on Windows. Other tools may need their own
