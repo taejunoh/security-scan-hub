@@ -79,10 +79,13 @@ results** restores the search, filters, scroll position, and keyboard focus.
 
 ## Download Security Scan Hub Desktop 0.2.4
 
-Version 0.2.4 is the current published Windows Store version and the available
-Mac release. A 0.2.5 Windows update is in Partner Center as a draft submission;
-it is not available yet. Select several security tools, start one scan, and
-review their findings and run status together in the **Security Inbox**.
+Version 0.2.4 remains the current published Windows Store version and the
+available Mac release. The Windows 0.2.5 update has been submitted for
+certification and is in pre-processing. It will remain unavailable until it
+passes certification and is manually published. See the [Windows 0.2.5
+validation record](docs/WINDOWS-0.2.5-VALIDATION.md). Select several security
+tools, start one scan, and review their findings and run status together in
+the **Security Inbox**.
 
 ### Install on Mac (Apple silicon)
 
@@ -125,6 +128,10 @@ or native Intel/AMD hardware.
 Up to five integrations are available after setup. The Cloudflare and
 Anthropic workflows are disabled on Windows. Other tools may need their own
 installation and provider sign-in.
+
+For Windows 0.2.5 coverage, see the [validation record](docs/WINDOWS-0.2.5-VALIDATION.md).
+Windows Codex Security 0.7.0 needs an opt-in local compatibility plugin; this
+does not automatically fix the upstream package ([setup](desktop/README.md#windows-codex-security-070-setup)).
 
 <details>
 <summary>Alternative: portable Windows ZIP (unsigned prerelease)</summary>

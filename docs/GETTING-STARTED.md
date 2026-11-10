@@ -3,8 +3,10 @@
 ## 1. Download and open the app
 
 For Windows, install the published Microsoft Store app. For Mac, download the
-0.2.4 prerelease ZIP for your computer. A Windows 0.2.5 update is in Partner
-Center review preparation and is not available yet. [GitHub 0.2.4 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
+0.2.4 prerelease ZIP for your computer. The Windows 0.2.5 update has been
+submitted for certification and is in pre-processing; version 0.2.4 remains
+the published Store app. After certification, it still requires manual
+publication. [Windows 0.2.5 validation record](WINDOWS-0.2.5-VALIDATION.md) · [GitHub 0.2.4 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
 
 - **Mac with Apple silicon (M-series).**
   In Finder, double-click the downloaded ZIP. Then double-click **Sec Hub.app**
@@ -19,8 +21,9 @@ Center review preparation and is not available yet. [GitHub 0.2.4 release page](
   included, so the first scan needs no terminal or separate OSV account.
   Windows 11 ARM in a virtual machine using x64 emulation has been checked for
   Store installation and a bundled OSV scan; this does not cover every scanner
-  or native Intel/AMD hardware. The separate 0.2.5 update is not available
-  until its Store submission is approved and published.
+  or native Intel/AMD hardware. See the [0.2.5 validation record](WINDOWS-0.2.5-VALIDATION.md)
+  for the separate candidate checks and their limits. The update is not
+  available until it is certified and manually published.
 
   **Windows ZIP fallback (unsigned prerelease):** in File Explorer, right-click
   the ZIP, choose **Extract All**, then open **Sec Hub.exe** in the extracted

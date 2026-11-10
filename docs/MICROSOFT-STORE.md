@@ -1,15 +1,16 @@
 # Microsoft Store submission runbook
 
-**Status: update draft in progress.** Security Scan Hub 0.2.4 (MSIX identity
-version 1.2.4.0) is published in the Microsoft Store. The next update, app
-version 0.2.5 / identity version 1.2.5.0, is Partner Center Submission 2,
-draft ID `1152921505702369546`; it has not been submitted for certification.
+**Status: update submitted for certification.** Security Scan Hub 0.2.4
+(MSIX identity version 1.2.4.0) remains published in the Microsoft Store.
+The app 0.2.5 / identity version 1.2.5.0 update is in Partner Center
+pre-processing. After certification, a maintainer must select **Publish now**;
+the update is not available to users before it is published.
 
 The confirmed package identity is `AllinSimple.SecurityScanHub`, publisher
 `CN=0498002F-4BC4-4404-B331-9629F74C3F46`, with publisher display name
 **All in Simple** and app display name **Security Scan Hub**. Keep the current
 published package available until Partner Center reports an outcome for the
-draft update.
+submitted update.
 
 ## Store identity and signing
 
@@ -17,7 +18,13 @@ A Microsoft Store submission does not need an individually purchased public-trus
 
 ## Package and verify
 
-The maintainer workflow builds the existing Windows x64 desktop payload into an MSIX, installs it on a native Windows runner, launches the installed app, runs the bundled OSV scan against a controlled fixture, checks that the report and recommended action are visible, and preserves the test evidence. The CI certificate and identity are for test use only.
+The native x64 CI workflow installed the test MSIX, launched the app, ran
+bundled OSV and a controlled PHP scan, and verified reports and recommendations.
+The CI certificate and identity are for test use only. Separate Windows 11
+ARM64 guest runs using x64 emulation completed OCR, PHP2Shell, SkillSpector,
+and Codex Security individually; they were not one combined four-tool run.
+See the [Windows 0.2.5 validation record](WINDOWS-0.2.5-VALIDATION.md) for
+results and limits.
 
 The **Desktop MSIX native Windows validation** workflow accepts the confirmed
 package identity fields above. It builds a separate unsigned Store candidate
@@ -64,11 +71,11 @@ Before submission, replace this note if the final UI, permissions, scanner behav
 
 ## Submission steps
 
-1. Run the MSIX workflow on Windows with the confirmed identity and review its installation, scan, report, recommendation, and payload comparison evidence.
+1. Review the completed MSIX workflow evidence for installation, scans, reports, recommendations, and payload comparison.
 2. Run Microsoft's current package checks and Windows App Certification Kit where required by Partner Center.
 3. Complete or verify pricing, markets, category, age rating, privacy URL, screenshots, description, and other required listing fields in Submission 2.
-4. Upload the 1.2.5.0 Store candidate. Inspect Partner Center validation messages before submitting.
-5. Submit the draft for certification only after validation and evidence review. Record the actual Partner Center outcome here and in the README; until then, 0.2.4 remains the published version.
+4. Confirm that the uploaded 1.2.5.0 Store candidate is the validated package and review Partner Center validation messages.
+5. The update has been submitted and is in pre-processing. Check its certification result. After certification, select **Publish now** at the intended time and record the actual publication outcome here and in the README. Until then, 0.2.4 remains the published version.
 
 ## References
 

@@ -1,15 +1,21 @@
 # Security Scan Hub desktop
 
-Choose the **Security Scan Hub Desktop 0.2.4** prerelease ZIP for your
-computer. [GitHub release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
+Version 0.2.4 remains the published Windows Store version and the available
+Mac release. The Windows 0.2.5 update has been submitted for certification and
+is in pre-processing. It requires a separate manual **Publish now** action
+after certification. See the [Windows 0.2.5 validation
+record](../docs/WINDOWS-0.2.5-VALIDATION.md) for coverage and limits.
+[GitHub 0.2.4 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
 
 - macOS Apple silicon, signed and notarized. [Apple silicon ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-darwin-arm64-notarized-prerelease.zip)
 - macOS Intel x64, signed and notarized. [Intel Mac ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-darwin-x64-notarized-prerelease.zip)
-- Windows x64, unsigned. [Windows ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-win32-x64-prerelease.zip)
+- Windows x64, published Store app. [Install Security Scan Hub](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
+- Windows x64, unsigned portable fallback. [Windows ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-win32-x64-prerelease.zip)
 - [SHA-256 checksums for all three ZIPs](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-SHA256SUMS.txt)
 
-Extract the ZIP and open `Sec Hub.app` on Mac or `Sec Hub.exe` on Windows.
-The app window is titled **Security Scan Hub**. [Step-by-step installation](../docs/GETTING-STARTED.md#1-download-and-open-the-app)
+Extract the Mac ZIP and open `Sec Hub.app`, or install the Windows Store app.
+For the portable Windows ZIP, extract it and open `Sec Hub.exe`. The app window
+is titled **Security Scan Hub**. [Step-by-step installation](../docs/GETTING-STARTED.md#1-download-and-open-the-app)
 
 The Intel package bundles OSV Scanner for a first scan without Terminal.
 It requires macOS 13 or later. Release validation covers the bundled OSV scan
@@ -50,6 +56,8 @@ that OSV checked.
 | Cloudflare Security Audit Skill | [Get the official skill](https://github.com/cloudflare/security-audit-skill) at the example revision. Install and sign in to Codex CLI 0.164.0 on macOS, then configure the checkout and a separate work folder. |
 | Anthropic Defending Code | [Get the official harness](https://github.com/anthropics/defending-code-reference-harness) at the example revision and [set up and sign in to Claude Code](https://code.claude.com/docs/en/setup). Configure the checkout and a separate work folder. The app runs the static `/vuln-scan` skill. |
 
+### Windows Codex Security 0.7.0 setup
+
 On Windows, Codex Security 0.7.0 supports Node.js 22.13.0 or newer in the
 22.x series, 24.x, or 26.x. It needs Python 3.10 or newer for scans and
 exports. Python 3.10 also needs `tomli`. If Codex Security cannot find
@@ -62,6 +70,13 @@ Codex Security 0.7.0 can fail to save a Windows scan when a draft manifest
 starts with a UTF-8 byte order mark. For a new scan, prepare a separate
 plugin from the pinned npm archive with the
 [preparation script](../scripts/prepare-codex-windows-plugin.py).
+
+This is an opt-in local compatibility workaround, not an upstream vendor fix:
+it changes only your prepared plugin copy, and the upstream package stays
+unchanged. The BOM decoder was verified by a separate pinned-reader regression
+test. The successful live Windows Codex run used this explicit local override,
+but its sealed files did not contain a BOM.
+
 From the Sec Hub source checkout in PowerShell, run these commands as the
 same Windows user who opens Sec Hub:
 
