@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, isAbsolute, normalize } from 'node:path';
 
 const scanFields = {
-  'codex-security': { auth: ['chatgpt','api-key','auto'], model: 'string', effort: ['low','medium','high','xhigh'], maxCost: 'positive', maxTimeMinutes: 'positive' },
+  'codex-security': { auth: ['chatgpt','api-key','auto'], model: 'string', effort: ['low','medium','high','xhigh'], maxCost: 'positive', maxTimeMinutes: 'positive', pluginPath: 'absolute' },
   'open-code-review': { provider: 'string', model: 'string', maxTokensBudget: 'integer', concurrency: 'integer', timeoutMinutes: 'integer', noPlan: 'boolean', noDedup: 'boolean', noSummary: 'boolean' },
 };
 
@@ -14,6 +14,7 @@ export function validateScanOptions(id, value) {
     const type = fields[key];
     const valid = Array.isArray(type) ? type.includes(item)
       : type === 'string' ? typeof item === 'string' && item.trim().length > 0 && !item.includes('\0') && !item.startsWith('-')
+      : type === 'absolute' ? typeof item === 'string' && !/[\x00-\x1f\x7f]/.test(item) && isAbsolute(item)
       : type === 'boolean' ? typeof item === 'boolean'
       : type === 'integer' ? Number.isSafeInteger(item) && item > 0
       : type === 'positive' ? typeof item === 'number' && Number.isFinite(item) && item > 0 : false;

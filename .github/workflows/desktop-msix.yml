@@ -55,6 +55,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-evidence" | Out-Null
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/sec-hub-msix-build" | Out-Null
+      - name: Verify the Codex Security BOM overlay with the pinned npm archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scratch = Join-Path $env:RUNNER_TEMP 'sec-hub-codex-bom-test'
+          $evidence = Join-Path $env:RUNNER_TEMP 'sec-hub-msix-evidence'
+          New-Item -ItemType Directory -Path $scratch | Out-Null
+          npm pack '@openai/codex-security@0.7.0' --ignore-scripts --pack-destination $scratch 2>&1 |
+            Tee-Object -FilePath (Join-Path $evidence 'codex-bom-npm-pack.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = Join-Path $scratch 'openai-codex-security-0.7.0.tgz'
+          python -B test/prepare-codex-windows-plugin.test.py $archive 2>&1 |
+            Tee-Object -FilePath (Join-Path $evidence 'codex-bom-overlay-test.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build the Windows x64 desktop app
         shell: cmd
         run: |
@@ -91,7 +105,7 @@ jobs:
             --publisher 'CN=Security Scan Hub CI' `
             --publisher-display-name 'Security Scan Hub CI' `
             --display-name 'Security Scan Hub CI' `
-            --version '1.2.4.0'
+            --version '1.2.5.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Sign temporarily, install, register in Start and verify scan and report
         shell: powershell
@@ -135,7 +149,7 @@ jobs:
             --publisher $env:STORE_PUBLISHER `
             --publisher-display-name $env:STORE_PUBLISHER_DISPLAY_NAME `
             --display-name $env:STORE_DISPLAY_NAME `
-            --version '1.2.4.0'
+            --version '1.2.5.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $testMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test/msix-identity.json" -Raw | ConvertFrom-Json
           $storeMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate/msix-identity.json" -Raw | ConvertFrom-Json

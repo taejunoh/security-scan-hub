@@ -132,8 +132,21 @@ export async function inspectDesktopTooling(baseTools, {
       } catch { return unavailable(tool, 'configuration_invalid'); }
     }
 
+    let scanOptions = entry?.scanOptions;
+    const pluginPath = id === 'codex-security' ? scanOptions?.pluginPath : undefined;
+    if (pluginPath !== undefined) {
+      try {
+        if (!isAbsolute(pluginPath)) return unavailable(tool, 'configuration_invalid');
+        const plugin = await assertSafeDirectory(pluginPath);
+        if (excluded.some(root => containsPath(root, plugin) || containsPath(plugin, root))) {
+          return unavailable(tool, 'configuration_invalid');
+        }
+        scanOptions = { ...scanOptions, pluginPath: plugin };
+      } catch { return unavailable(tool, 'configuration_invalid'); }
+    }
+
     const nodeExecutable = wrappers.has(id) ? await (node ??= runtime()) : null;
     if (wrappers.has(id) && !nodeExecutable) return unavailable(tool, 'node_required', 'installed');
-    return { ...tool, ...entry, args, command, installation: 'installed', ...(nodeExecutable ? { nodeExecutable } : {}) };
+    return { ...tool, ...entry, args, command, installation: 'installed', ...(scanOptions ? { scanOptions } : {}), ...(nodeExecutable ? { nodeExecutable } : {}) };
   }));
 }

@@ -1,21 +1,30 @@
 # Microsoft Store submission runbook
 
-**Status: preparation only.** The app name, Store publisher identity, and active Partner Center developer account still need to be confirmed. Do not submit a package with a test identity.
+**Status: update draft in progress.** Security Scan Hub 0.2.4 (MSIX identity
+version 1.2.4.0) is published in the Microsoft Store. The next update, app
+version 0.2.5 / identity version 1.2.5.0, is Partner Center Submission 2,
+draft ID `1152921505702369546`; it has not been submitted for certification.
 
-## Before creating the Store package
+The confirmed package identity is `AllinSimple.SecurityScanHub`, publisher
+`CN=0498002F-4BC4-4404-B331-9629F74C3F46`, with publisher display name
+**All in Simple** and app display name **Security Scan Hub**. Keep the current
+published package available until Partner Center reports an outcome for the
+draft update.
 
-1. Sign in to the [Microsoft Store Developer Portal](https://storedeveloper.microsoft.com/) with the Microsoft account that will own the listing. Complete Partner Center registration and account verification.
-2. Create an MSIX app product and reserve **Security Scan Hub** if available. Partner Center assigns the package identity. Copy the exact package `Name`, `Publisher`, and display name from **Product identity**.
-3. Confirm the listing owner and legal publisher name. The publisher value in `AppxManifest.xml` must match Partner Center exactly. Do not guess it from the Microsoft account email.
-4. Confirm listing requirements and target Windows versions in Partner Center. Prepare the final package identity and matching version before the native Windows release workflow is dispatched.
+## Store identity and signing
 
 A Microsoft Store submission does not need an individually purchased public-trust certificate. Microsoft re-signs an MSIX after it passes Store certification. A self-signed certificate used by CI only tests installation on the disposable test runner. It is not a public publisher signature, and that CI package is not the Store release.
 
 ## Package and verify
 
-The maintainer workflow is intended to build the existing Windows x64 desktop payload into an MSIX, install it on a native Windows runner, launch the installed app, run the bundled OSV scan against a controlled fixture, check that the report and recommended action are visible, and preserve the test evidence. The CI certificate and identity are for test use only.
+The maintainer workflow builds the existing Windows x64 desktop payload into an MSIX, installs it on a native Windows runner, launches the installed app, runs the bundled OSV scan against a controlled fixture, checks that the report and recommended action are visible, and preserves the test evidence. The CI certificate and identity are for test use only.
 
-The **Desktop MSIX native Windows validation** workflow accepts the reserved package name, publisher distinguished name, publisher display name, and app display name. It builds a separate unsigned Store candidate after the installed test package passes. The workflow checks that the app payload hashes match between the two packages. For desktop app 0.2.4, the MSIX identity version is 1.2.4.0 to meet Store versioning requirements. Submit the Store candidate only. [Microsoft package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)
+The **Desktop MSIX native Windows validation** workflow accepts the confirmed
+package identity fields above. It builds a separate unsigned Store candidate
+after the installed test package passes and checks that the app payload hashes
+match between the two packages. For this update, app version 0.2.5 uses MSIX
+identity version 1.2.5.0 to meet Store versioning requirements. Submit the
+Store candidate only. [Microsoft package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)
 
 The app is a full-trust desktop application because it launches the packaged OSV executable and, when explicitly configured, other native scanner processes. The package manifest must declare the applicable full-trust capability. In certification notes, explain the user-initiated scan flow and that the app runs only the scanners the user selects. OSV reads dependency manifests and uses its upstream vulnerability lookup service. AI tools require per-run approval before code or related context can be sent to a configured provider. Scans save reports locally.
 
@@ -55,12 +64,11 @@ Before submission, replace this note if the final UI, permissions, scanner behav
 
 ## Submission steps
 
-1. Confirm the exact Store package identity and publisher in Partner Center.
-2. Run the MSIX workflow on Windows with the Store identity fields and review its installation, scan, report, recommendation, and payload comparison evidence.
-3. Run Microsoft's current package checks and Windows App Certification Kit where required by Partner Center.
-4. Create the submission and complete pricing, markets, category, age rating, privacy URL, screenshots, description, and other required listing fields.
-5. Upload the package in the format requested by Partner Center. Inspect validation messages before submission.
-6. Submit for certification. Update this runbook and README only after Partner Center reports the actual outcome.
+1. Run the MSIX workflow on Windows with the confirmed identity and review its installation, scan, report, recommendation, and payload comparison evidence.
+2. Run Microsoft's current package checks and Windows App Certification Kit where required by Partner Center.
+3. Complete or verify pricing, markets, category, age rating, privacy URL, screenshots, description, and other required listing fields in Submission 2.
+4. Upload the 1.2.5.0 Store candidate. Inspect Partner Center validation messages before submitting.
+5. Submit the draft for certification only after validation and evidence review. Record the actual Partner Center outcome here and in the README; until then, 0.2.4 remains the published version.
 
 ## References
 

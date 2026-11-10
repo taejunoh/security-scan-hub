@@ -42,7 +42,7 @@ function executable(ctx, id, command) {
 function scanArgs(ctx, id) {
   const options = validateScanOptions(id, ctx.config?.tools?.[id]?.scanOptions);
   const flags = id === 'codex-security'
-    ? { auth: '--auth', model: '--model', effort: '--effort', maxCost: '--max-cost', maxTimeMinutes: '--max-time' }
+    ? { auth: '--auth', model: '--model', effort: '--effort', maxCost: '--max-cost', maxTimeMinutes: '--max-time', pluginPath: '--plugin-path' }
     : { provider: '--provider', model: '--model', maxTokensBudget: '--max-tokens-budget', concurrency: '--concurrency', timeoutMinutes: '--timeout', noPlan: '--no-plan', noDedup: '--no-dedup', noSummary: '--no-summary' };
   return Object.entries(flags).flatMap(([key, flag]) => options[key] === undefined || options[key] === false ? [] : options[key] === true ? [flag] : [flag, String(options[key])]);
 }
@@ -53,7 +53,7 @@ function command(ctx, id, defaultCommand, args, findingCodes = []) {
 function exit(ctx, id, allowed) { if (!allowed.includes(ctx.exitCode)) invalid(id, `unsupported native exit code ${ctx.exitCode}`); }
 async function nativeJSON(ctx, id) {
   let text;
-  if (id === 'php2shell') text = ctx.stdout;
+  if (id === 'php2shell' || (id === 'skillspector' && process.platform === 'win32')) text = ctx.stdout;
   else {
     const path = join(ctx.artifactDir, id === 'codex-security' ? 'findings.json' : 'native.json');
     // A handle prevents a path swap between metadata validation and the bounded read.
@@ -133,13 +133,21 @@ async function parseOSV(ctx) {
   return findings;
 }
 
+function buildSkillspector(ctx) {
+  const args = ['scan', ctx.target, '--no-llm', '--format', 'json'];
+  // SkillSpector's safe file output is unsupported on Windows.
+  if (process.platform !== 'win32') args.push('--output', join(ctx.artifactDir, 'native.json'));
+  return command(ctx, 'skillspector', 'skillspector', args, [1]);
+}
+
 async function parseSkillspector(ctx) {
   const id = 'skillspector'; exit(ctx, id, [0, 1]);
   const data = await nativeJSON(ctx, id);
   if (!object(data.skill) || !object(data.risk_assessment) || !Array.isArray(data.issues) || typeof data.execution_successful !== 'boolean' || !object(data.analysis_completeness)) invalid(id, 'unsupported issues schema');
+  const rawRef = join(ctx.artifactDir, process.platform === 'win32' ? 'stdout.txt' : 'native.json');
   const findings = data.issues.map(f => {
     if (!object(f) || !string(f.id) || !string(f.finding_id) || !object(f.location) || !string(f.location.file) || !line(f.location.start_line) || !string(f.explanation)) invalid(id, 'invalid issue record');
-    return { id: f.finding_id, toolId: id, ruleId: f.id, title: string(f.finding) ? f.finding : f.explanation, severity: severity(f.severity), description: f.explanation, location: { path: f.location.file, line: f.location.start_line }, references: f.source_url ? [f.source_url] : [], evidence: { nativeSeverity: f.severity ?? null, confidence: f.confidence, remediation: f.remediation, codeSnippet: f.code_snippet, tags: f.tags, nativeEvidence: f.evidence, occurrences: f.occurrences, analysisCompleteness: data.analysis_completeness }, verification: 'candidate', rawRef: join(ctx.artifactDir, 'native.json') };
+    return { id: f.finding_id, toolId: id, ruleId: f.id, title: string(f.finding) ? f.finding : f.explanation, severity: severity(f.severity), description: f.explanation, location: { path: f.location.file, line: f.location.start_line }, references: f.source_url ? [f.source_url] : [], evidence: { nativeSeverity: f.severity ?? null, confidence: f.confidence, remediation: f.remediation, codeSnippet: f.code_snippet, tags: f.tags, nativeEvidence: f.evidence, occurrences: f.occurrences, analysisCompleteness: data.analysis_completeness }, verification: 'candidate', rawRef };
   });
   if (!data.execution_successful || data.analysis_completeness.is_complete === false || (data.analysis_completeness.status && data.analysis_completeness.status !== 'complete')) incomplete(id, findings);
   return findings;
@@ -179,7 +187,7 @@ async function parsePHP(ctx) {
 
 export const adapters = [
   { id: 'osv', name: 'Google OSV Scanner', kind: 'cli', source: sources.osv, requiresAI: false, network: 'OSV vulnerability database and package metadata services', install: 'go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0', check: ctx => probe(ctx, 'osv', 'osv-scanner'), build: ctx => command(ctx, 'osv', 'osv-scanner', ['scan', 'source', '-r', '--no-resolve', '--no-call-analysis=go', '--no-call-analysis=rust', '--format', 'json', '--output-file', join(ctx.artifactDir, 'native.json'), ctx.target], [1]), parse: parseOSV },
-  { id: 'skillspector', name: 'NVIDIA SkillSpector (static)', kind: 'cli', source: sources.skillspector, requiresAI: false, network: 'Static mode; advisory enrichment may access external vulnerability services', install: 'uv tool install git+https://github.com/NVIDIA/skillspector.git@a5425e594d59a14c3d3eaa39e26847613ba08696', check: ctx => probe(ctx, 'skillspector', 'skillspector'), build: ctx => command(ctx, 'skillspector', 'skillspector', ['scan', ctx.target, '--no-llm', '--format', 'json', '--output', join(ctx.artifactDir, 'native.json')], [1]), parse: parseSkillspector },
+  { id: 'skillspector', name: 'NVIDIA SkillSpector (static)', kind: 'cli', source: sources.skillspector, requiresAI: false, network: 'Static mode; advisory enrichment may access external vulnerability services', install: 'uv tool install git+https://github.com/NVIDIA/skillspector.git@a5425e594d59a14c3d3eaa39e26847613ba08696', check: ctx => probe(ctx, 'skillspector', 'skillspector'), build: buildSkillspector, parse: parseSkillspector },
   { id: 'codex-security', name: 'OpenAI Codex Security', kind: 'cli', source: sources['codex-security'], requiresAI: true, network: 'Code and context may be uploaded to the configured model provider', install: 'npm install -g @openai/codex-security@0.7.0', check: ctx => probe(ctx, 'codex-security', 'cs'), build: ctx => ({ command: ctx.nodeExecutable ?? process.execPath, args: [wrapper, JSON.stringify({ ...executable(ctx, 'codex-security', 'cs'), target: ctx.target, artifactDir: ctx.artifactDir, scanArgs: scanArgs(ctx, 'codex-security') })], successCodes: [0], findingCodes: [1] }), parse: parseCodex },
   { id: 'open-code-review', name: 'Alibaba Open Code Review', kind: 'cli', source: sources['open-code-review'], requiresAI: true, network: 'Code and context may be uploaded to the configured model provider; native OCR may write session metadata', install: 'npm install -g @alibaba-group/open-code-review@1.13.3', check: ctx => probe(ctx, 'open-code-review', 'ocr'), build: ctx => command(ctx, 'open-code-review', 'ocr', ['scan', '--repo', ctx.target, '--format', 'json', '--output', join(ctx.artifactDir, 'native.json'), ...scanArgs(ctx, 'open-code-review')]), parse: parseOCR },
   { id: 'php2shell', name: 'OpenAI PHP2Shell Checker (header heuristic)', kind: 'cli', source: sources.php2shell, requiresAI: false, network: 'HEAD, with GET fallback on 405/501, to the explicitly provided URL only; no redirects followed', install: 'git clone https://github.com/openai/php2shell-checker.git; configure command node and args [absolute path to phpcheck.js]', check: ctx => probe(ctx, 'php2shell', 'phpcheck.js'), build: ctx => command(ctx, 'php2shell', 'phpcheck.js', [ctx.url, '--json'], [1, 3]), parse: parsePHP },

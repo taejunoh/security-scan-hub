@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { access, chmod, copyFile, mkdtemp, mkdir, readFile, realpath, rename, rm, utimes, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -234,6 +234,26 @@ test('the desktop inspector blocks project executables and Windows native agent 
     assert.equal(tool.command, undefined);
     assert.equal(tool.unavailableReason, 'platform_unsupported');
   }
+});
+
+test('desktop Codex Security requires its explicit plugin to be outside the project and reports', async (t) => {
+  const { root, target, runs } = await fixture(t);
+  const command = await fixtureNode(root);
+  const privatePlugin = join(root, 'private plugin');
+  await mkdir(privatePlugin, { mode: 0o700 });
+  const baseTools = [{ id: 'codex-security', installation: 'unknown' }];
+  const inspect = async (pluginPath) => (await inspectDesktopTooling(baseTools, {
+    targetPath: target, runsRoot: runs, configPath: join(root, 'tools.json'), nodePath: command,
+    config: { tools: { 'codex-security': { command, scanOptions: { pluginPath } } } },
+  }))[0];
+
+  for (const overlap of [root, target, runs]) {
+    assert.equal((await inspect(overlap)).unavailableReason, 'configuration_invalid');
+  }
+  const alias = join(root, 'plugin alias');
+  await symlink(privatePlugin, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await inspect(alias)).unavailableReason, 'configuration_invalid');
+  assert.equal((await inspect(privatePlugin)).scanOptions.pluginPath, privatePlugin);
 });
 
 test('desktop report IDs resolve on the same origin only inside the authorized desktop session', async (t) => {

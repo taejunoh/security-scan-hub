@@ -38,9 +38,17 @@ node /absolute/tools/php2shell-checker/phpcheck.js http://127.0.0.1:8080/ --json
 
 OSV's default Go call analysis is disabled, as is Rust call analysis; manifest dependency resolution is disabled. Dependency coverage therefore depends on the lockfiles/SBOMs available to OSV. No no-lockfile success option is added. Exit 1 means findings, while other nonzero codes fail execution. Group numeric CVSS ratings map to canonical severity bands; unrecognized ratings remain unknown and native vectors remain in evidence.
 
-SkillSpector supports the current single-skill `issues` JSON shape. Active findings are preserved; suppressed native findings remain in the raw report. Native unsuccessful/incomplete scans raise an error carrying validated findings, so core reports failed coverage while retaining those findings. Exit 1 can mean a risk threshold, findings policy, or incomplete policy; the JSON coverage fields distinguish these.
+SkillSpector supports the current single-skill `issues` JSON shape. On Windows, omit `--output` because SkillSpector 2.12.0 rejects file output there. Sec Hub captures the JSON from stdout and saves the redacted copy in `stdout.txt`. The stdout contract was verified against the native Windows CLI. Windows Store package verification requires a build containing this adapter. Active findings are preserved; suppressed native findings remain in the raw report. Native unsuccessful/incomplete scans raise an error carrying validated findings, so core reports failed coverage while retaining those findings. Exit 1 can mean a risk threshold, findings policy, or incomplete policy; the JSON coverage fields distinguish these.
 
 Codex Security needs its native results outside every enclosing worktree. A small Node wrapper creates a private temporary parent, runs scan then export, and copies the native result tree into `artifacts/codex-security/codex-results` before cleanup. Per-step stdout/stderr are retained and also forwarded to the core's bounded streams. The wrapper forwards termination to the current child; children remain in the core process group. It preserves scan exit 1 after successful export and never exports after a failed scan. The canonical parser accepts the exported `codex-security.findings` v1.0 document, preserving occurrence IDs and code evidence. Findings are labelled reported, which does not assert runtime reproduction.
+
+For a fresh Windows scan with Codex Security 0.7.0, the optional absolute
+`scanOptions.pluginPath` maps to the native scan's `--plugin-path`. The
+[preparation script](../../scripts/prepare-codex-windows-plugin.py) verifies the
+official npm archive and prepares a separate copy that accepts a leading
+UTF-8 BOM in the workbench JSON reader. Normal scan completion, sealing, and
+export still run upstream. For the offline regression, pass the same npm
+archive to `python test/prepare-codex-windows-plugin.test.py <archive>`.
 
 Open Code Review uses full-file `scan`, not a diff-only review. It can create native session metadata. Its general review comments can include non-security categories, which are preserved. Native partial/error statuses, budget exhaustion and review-limit warnings fail coverage while retaining findings. A successful review does not prove every vulnerability was found.
 

@@ -2,7 +2,9 @@
 
 ## 1. Download and open the app
 
-Choose the 0.2.4 prerelease ZIP for your computer. [GitHub release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
+For Windows, install the published Microsoft Store app. For Mac, download the
+0.2.4 prerelease ZIP for your computer. A Windows 0.2.5 update is in Partner
+Center review preparation and is not available yet. [GitHub 0.2.4 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
 
 - **Mac with Apple silicon (M-series).**
   In Finder, double-click the downloaded ZIP. Then double-click **Sec Hub.app**
@@ -12,11 +14,20 @@ Choose the 0.2.4 prerelease ZIP for your computer. [GitHub release page](https:/
   so the first scan runs in the app without Terminal. [Download the signed and
   notarized Intel Mac ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-darwin-x64-notarized-prerelease.zip)
 - **Windows x64 (Intel or AMD).**
-  In File Explorer, right-click the ZIP, choose **Extract All**, then open
-  **Sec Hub.exe** in the extracted **Sec Hub** folder. Keep the extracted files
-  together. Windows may show an unknown publisher warning because this build
-  has no Sec Hub publisher signature. Keep your system protections enabled; if
-  your device blocks the app, check with your administrator. [Download the Windows ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-win32-x64-prerelease.zip)
+  Open [Security Scan Hub in the Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
+  and install the published 0.2.4 app by **All in Simple**. OSV Scanner is
+  included, so the first scan needs no terminal or separate OSV account.
+  Windows 11 ARM in a virtual machine using x64 emulation has been checked for
+  Store installation and a bundled OSV scan; this does not cover every scanner
+  or native Intel/AMD hardware. The separate 0.2.5 update is not available
+  until its Store submission is approved and published.
+
+  **Windows ZIP fallback (unsigned prerelease):** in File Explorer, right-click
+  the ZIP, choose **Extract All**, then open **Sec Hub.exe** in the extracted
+  **Sec Hub** folder. Keep the extracted files together. Windows may show an
+  unknown publisher warning because this ZIP has no Sec Hub publisher
+  signature. Keep your system protections enabled; if your device blocks the
+  app, check with your administrator. [Download the Windows 0.2.4 ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-win32-x64-prerelease.zip)
 
 The app window is titled **Security Scan Hub**.
 
@@ -24,9 +35,9 @@ The Intel package requires macOS 13 or later. Release validation covers the
 bundled OSV scan on macOS 15 on Intel. You can also scan from Terminal and
 view the report in a browser. [Intel Mac Terminal fallback](#intel-mac-scan-from-terminal)
 
-The Windows ZIP requires an x64 PC. If you're downloading from the
-release page, look under **Assets** for the ZIP linked above. The
-**Source code** archives do not contain the ready-to-run app.
+The Windows ZIP requires an x64 PC. If you download it from the release page,
+look under **Assets** for the ZIP linked above. The **Source code** archives do
+not contain the ready-to-run app.
 
 The app includes its runtime and OSV Scanner. You can run your first OSV scan
 as soon as you open the app.

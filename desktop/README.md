@@ -50,6 +50,45 @@ that OSV checked.
 | Cloudflare Security Audit Skill | [Get the official skill](https://github.com/cloudflare/security-audit-skill) at the example revision. Install and sign in to Codex CLI 0.164.0 on macOS, then configure the checkout and a separate work folder. |
 | Anthropic Defending Code | [Get the official harness](https://github.com/anthropics/defending-code-reference-harness) at the example revision and [set up and sign in to Claude Code](https://code.claude.com/docs/en/setup). Configure the checkout and a separate work folder. The app runs the static `/vuln-scan` skill. |
 
+On Windows, Codex Security 0.7.0 supports Node.js 22.13.0 or newer in the
+22.x series, 24.x, or 26.x. It needs Python 3.10 or newer for scans and
+exports. Python 3.10 also needs `tomli`. If Codex Security cannot find
+Python, add its installation directory to your user `PATH` or set the
+user `PYTHON` environment variable to the absolute path to `python.exe`,
+then fully quit and reopen Security Scan Hub. If you scan a Git checkout,
+install Git for Windows and make `git.exe` available on `PATH`.
+
+Codex Security 0.7.0 can fail to save a Windows scan when a draft manifest
+starts with a UTF-8 byte order mark. For a new scan, prepare a separate
+plugin from the pinned npm archive with the
+[preparation script](../scripts/prepare-codex-windows-plugin.py).
+From the Sec Hub source checkout in PowerShell, run these commands as the
+same Windows user who opens Sec Hub:
+
+```powershell
+npm pack '@openai/codex-security@0.7.0' --ignore-scripts
+python .\scripts\prepare-codex-windows-plugin.py .\openai-codex-security-0.7.0.tgz "$env:LOCALAPPDATA\SecHubCodexSecurity070"
+```
+
+If you configured `PYTHON` without adding it to `PATH`, use
+`& $env:PYTHON` in place of `python`. Use a new destination under your
+private user profile, outside any project you scan and outside the report
+directory. The script checks the archive
+digest, changes only the JSON decoder in the copy, and writes
+`provenance.json`. In your Sec Hub configuration, add `pluginPath` to
+`tools["codex-security"].scanOptions`, with the absolute path to the
+`plugin` directory printed by the script. Escape backslashes in JSON.
+The installed Codex Security package stays unchanged. Keep the plugin
+directory private because Codex Security loads its code during the scan.
+
+On Windows, if you use ChatGPT with Open Code Review 1.13.3, sign in with
+`ocr auth login --provider chatgpt`. Then run
+`ocr config set provider chatgpt` and
+`ocr config set providers.chatgpt.model <supported-model>`, replacing
+`<supported-model>` with a model supported by your account and the tool.
+Selecting ChatGPT in the Sec Hub tool configuration passes a scan flag.
+Open Code Review still needs the provider and model saved in its own configuration.
+
 The restricted Cloudflare and Anthropic workflows are available on Apple
 silicon macOS. They are not validated on Intel and are disabled on Windows
 pending validation of their restricted execution environments there. The other

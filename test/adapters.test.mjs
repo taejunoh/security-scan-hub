@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, symlink, truncate } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile, symlink, truncate } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -70,6 +70,46 @@ test('desktop-selected Node runtime launches wrappers while preserving the confi
   }
 });
 
+test('Codex Security passes an explicit plugin path to scan without changing the executable prefix', () => {
+  const pluginPath = join(tmpdir(), 'private plugin');
+  const adapter = getAdapter('codex-security');
+  const ctx = { target: '/repo', artifactDir: '/artifacts' };
+  const build = path => adapter.build({ ...ctx, config: { tools: {
+    'codex-security': { command: process.execPath, args: ['cli.mjs'], scanOptions: { pluginPath: path } },
+  } } });
+
+  const spec = JSON.parse(build(pluginPath).args[1]);
+  assert.deepEqual(spec.args, ['cli.mjs']);
+  assert.deepEqual(spec.scanArgs, ['--plugin-path', pluginPath]);
+  assert.throws(() => build('relative/plugin'), /scanOptions\.pluginPath/);
+});
+
+test('Codex Security wrapper rejects a plugin inside the scan target before launching the CLI', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'sec-codex-plugin-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const target = join(root, 'target');
+  const pluginPath = join(target, 'project plugin');
+  const artifactDir = join(root, 'reports');
+  await mkdir(pluginPath, { recursive: true });
+  await mkdir(artifactDir);
+  const spec = getAdapter('codex-security').build({
+    target,
+    artifactDir,
+    config: { tools: { 'codex-security': {
+      command: process.execPath, args: ['must-not-launch.mjs'], scanOptions: { pluginPath },
+    } } },
+  });
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(spec.command, spec.args);
+    let stderr = '';
+    child.stderr.on('data', data => { stderr += data; });
+    child.on('error', reject);
+    child.on('close', exitCode => resolve({ stderr, exitCode }));
+  });
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /plugin directory must be outside the scan target/);
+});
+
 test('OSV maps package advisories, aliases, severity and native evidence', async () => {
   const out = await parse('osv', await fixture('osv-positive'), 1);
   assert.equal(out.length, 1);
@@ -99,6 +139,21 @@ test('SkillSpector current issues schema preserves rule, locations and remediati
   assert.equal(out[0].location.line, 8);
   assert.equal(out[0].evidence.remediation, 'Avoid remote execution.');
   assert.equal(out[0].verification, 'candidate');
+});
+
+test('SkillSpector on Windows scans without file output and links findings to captured stdout', async (t) => {
+  const artifactDir = await mkdtemp(join(tmpdir(), 'sec-adapter-'));
+  const stdout = JSON.stringify(await fixture('skillspector-positive'));
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  t.after(() => Object.defineProperty(process, 'platform', platform));
+  const ctx = { target: '/repo', artifactDir, stdout, exitCode: 1 };
+  const adapter = getAdapter('skillspector');
+
+  assert.deepEqual(adapter.build(ctx).args, ['scan', '/repo', '--no-llm', '--format', 'json']);
+  const [finding] = await adapter.parse(ctx);
+  assert.equal(finding.id, 'finding-demo');
+  assert.equal(finding.rawRef, join(artifactDir, 'stdout.txt'));
 });
 
 test('SkillSpector clean and incomplete results are distinguished; valid partial findings retained', async () => {

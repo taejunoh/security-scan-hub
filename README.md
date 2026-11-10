@@ -79,8 +79,10 @@ results** restores the search, filters, scroll position, and keyboard focus.
 
 ## Download Security Scan Hub Desktop 0.2.4
 
-Version 0.2.4 is a prerelease. Select several security tools, start one scan,
-and review their findings and run status together in the **Security Inbox**.
+Version 0.2.4 is the current published Windows Store version and the available
+Mac release. A 0.2.5 Windows update is in Partner Center as a draft submission;
+it is not available yet. Select several security tools, start one scan, and
+review their findings and run status together in the **Security Inbox**.
 
 ### Install on Mac (Apple silicon)
 
@@ -109,8 +111,8 @@ on macOS 15 on Intel.
 2. Select **Download**, **Get**, or **Install**. Confirm that the app is **Security Scan Hub** by **All in Simple**.
 3. Open **Security Scan Hub** from the Start menu, then follow [Run your first scan](#run-your-first-scan-with-024).
 
-The Store app supports Intel and AMD x64 PCs running Windows 10 version 2004
-or later, or Windows 11. OSV Scanner is included: you do not need a terminal,
+The published Store app (0.2.4) supports Intel and AMD x64 PCs running Windows
+10 version 2004 or later, or Windows 11. OSV Scanner is included: you do not need a terminal,
 Node.js, or a separate OSV account for your first scan. Microsoft handles the
 Store package signature; you do not need to install a certificate.
 

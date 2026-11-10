@@ -7,6 +7,7 @@ import { finished } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, relative, isAbsolute, sep } from 'node:path';
 import { createRedactor } from '../redaction.mjs';
+import { assertSafeDirectory } from '../safe-io.mjs';
 const redact = createRedactor();
 
 let active;
@@ -28,8 +29,8 @@ async function canonicalPath(path) {
     return join(await canonicalPath(parent), relative(parent, absolute));
   }
 }
-async function safeTemporaryBase(target) {
-  const base = await realpath(tmpdir()), source = await canonicalPath(target);
+async function targetWorktreeRoots(target) {
+  const source = await canonicalPath(target);
   const forbidden = [source];
   // Discover every enclosing worktree from filesystem markers. This deliberately
   // runs no Git command, so repository fsmonitor/hooks/config cannot execute.
@@ -38,6 +39,10 @@ async function safeTemporaryBase(target) {
     catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error; }
     if (dirname(directory) === directory) break;
   }
+  return forbidden;
+}
+async function safeTemporaryBase(forbidden) {
+  const base = await realpath(tmpdir());
   if (forbidden.some(directory => inside(directory, base))) {
     throw Object.assign(new Error('Temporary directory is inside the source target or an enclosing Git worktree; set TMPDIR to a writable directory outside the checkout.'), { code: 'UNSAFE_TMPDIR' });
   }
@@ -63,11 +68,22 @@ async function native(options, label, argv) {
 }
 async function main() {
   const options = JSON.parse(process.argv[2]);
-  const temporary = await mkdtemp(join(await safeTemporaryBase(options.target), 'sec-hub-codex-'));
+  const forbidden = await targetWorktreeRoots(options.target);
+  const scanArgs = options.scanArgs ?? [];
+  const pluginIndex = scanArgs.indexOf('--plugin-path');
+  if (pluginIndex !== -1) {
+    const plugin = await assertSafeDirectory(scanArgs[pluginIndex + 1]);
+    const reportDirectory = await canonicalPath(options.artifactDir);
+    if ([...forbidden, reportDirectory].some(root => inside(root, plugin) || inside(plugin, root))) {
+      throw new Error('Codex Security plugin directory must be outside the scan target, enclosing worktrees and report directory.');
+    }
+    scanArgs[pluginIndex + 1] = plugin;
+  }
+  const temporary = await mkdtemp(join(await safeTemporaryBase(forbidden), 'sec-hub-codex-'));
   const results = join(temporary, 'results');
   try {
     if (interrupted) return interrupted;
-    const scanCode = await native(options, 'scan', ['scan', options.target, '--output-dir', results, '--headless', '--json', ...(options.scanArgs ?? [])]);
+    const scanCode = await native(options, 'scan', ['scan', options.target, '--output-dir', results, '--headless', '--json', ...scanArgs]);
     if (interrupted) return interrupted;
     let code = scanCode;
     if ([0, 1].includes(scanCode)) {

@@ -221,6 +221,10 @@ async function fiveToolConfig(directory,{failOCR=false}={}) {
     if(id==='open-code-review'&&${JSON.stringify(failOCR)}){console.error('controlled native failure');process.exit(9);}
     if(id==='codex-security'&&a[0]==='scan'){await mkdir(a[a.indexOf('--output-dir')+1],{recursive:true});process.exit(0);}
     if(id==='php2shell'){console.log(JSON.stringify({patch_status:'potentially_vulnerable',php_version:'8.1.2',reason:'Controlled fixture',exit_code:1}));process.exit(1);}
+    if(id==='skillspector'&&process.platform==='win32'){
+      if(a.includes('--output')){console.error('Safe file output is unsupported on this platform.');process.exit(2);}
+      console.log(JSON.stringify(data[id]));process.exit(0);
+    }
     const flag=id==='osv'?'--output-file':'--output';
     await writeFile(a[a.indexOf(flag)+1],JSON.stringify(data[id]));`);
   const tools=Object.fromEntries(['osv','skillspector','codex-security','open-code-review','php2shell'].map(id=>[id,{command:process.execPath,args:[fake,id]}]));
