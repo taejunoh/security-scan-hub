@@ -1,6 +1,6 @@
 # Security Scan Hub privacy
 
-**Status:** Draft for Microsoft Store review. Last reviewed for the 0.2.4 desktop source on November 9, 2026. Review this notice against the exact Store build before submission.
+Last updated November 9, 2026.
 
 Security Scan Hub runs on your computer. It reads the project folder you select for the tools you choose, and saves scan reports in the app's local data folder. It does not send reports to a Security Scan Hub server.
 
@@ -26,4 +26,3 @@ The source code contains no Security Scan Hub account service or custom analytic
 
 For privacy questions, open a GitHub issue at [taejunoh/security-scan-hub](https://github.com/taejunoh/security-scan-hub/issues). GitHub issues are public. Keep private project data and reports out of the issue.
 
-This notice describes the app behavior checked in the stated source version. It is not a statement about how third-party scanner or AI providers handle data. Review it again whenever app networking, scan inputs, or output locations change.
