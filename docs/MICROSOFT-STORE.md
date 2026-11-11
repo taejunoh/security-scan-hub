@@ -1,10 +1,11 @@
 # Microsoft Store submission runbook
 
-**Status: update submitted for certification.** Security Scan Hub 0.2.4
-(MSIX identity version 1.2.4.0) remains published in the Microsoft Store.
-The app 0.2.5 / identity version 1.2.5.0 update is in Partner Center
-pre-processing. After certification, a maintainer must select **Publish now**;
-the update is not available to users before it is published.
+**Status on November 11, 2026.** Security Scan Hub 0.2.4
+(MSIX identity version 1.2.4.0) is published in the Microsoft Store.
+Version 0.2.5 (1.2.5.0, Submission 2) passed certification and has
+entered publishing after the maintainer selected **Publish now**.
+Partner Center currently hides **Start update** while it publishes
+Submission 2. The 0.2.6 Store update has yet to be submitted.
 
 The confirmed package identity is `AllinSimple.SecurityScanHub`, publisher
 `CN=0498002F-4BC4-4404-B331-9629F74C3F46`, with publisher display name
@@ -29,9 +30,10 @@ results and limits.
 The **Desktop MSIX native Windows validation** workflow accepts the confirmed
 package identity fields above. It builds a separate unsigned Store candidate
 after the installed test package passes and checks that the app payload hashes
-match between the two packages. For this update, app version 0.2.5 uses MSIX
-identity version 1.2.5.0 to meet Store versioning requirements. Submit the
-Store candidate only. [Microsoft package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)
+match between the two packages. App version 0.2.6 maps to MSIX identity
+version 1.2.6.0. Submit the Store-identity candidate from the [Windows x64
+validation run](https://github.com/taejunoh/security-scan-hub/actions/runs/43093673636).
+[Microsoft package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)
 
 The app is a full-trust desktop application because it launches the packaged OSV executable and, when explicitly configured, other native scanner processes. The package manifest must declare the applicable full-trust capability. In certification notes, explain the user-initiated scan flow and that the app runs only the scanners the user selects. OSV reads dependency manifests and uses its upstream vulnerability lookup service. AI tools require per-run approval before code or related context can be sent to a configured provider. Scans save reports locally.
 
@@ -53,6 +55,12 @@ The app includes Google OSV Scanner for dependency vulnerability checks. Other i
 
 Security Scan Hub saves scan reports on your device. See the [Privacy notice](https://github.com/taejunoh/security-scan-hub/blob/main/docs/PRIVACY.md) before use.
 
+**What's new in 0.2.6**
+
+New first-scan guidance helps you select the folder that contains your app's
+code. You can run a bundled example scan, review findings in the Security
+Inbox, and reopen your saved scans.
+
 **Category and age rating**
 
 Choose the closest available developer tools or productivity category in Partner Center. Complete the current age-rating questionnaire based on the packaged app and its external scanner integrations.
@@ -63,7 +71,9 @@ Capture Windows screenshots from the app being submitted. Include project select
 
 ## Certification notes draft
 
-> Security Scan Hub is a local desktop workbench for user-initiated software security scans. To exercise the basic scan, launch the app, open **Project security scan**, choose a test project with a package lockfile, select **OSV Scanner**, and click **Start scan**. The app runs the bundled OSV Scanner against the selected files. It may make vulnerability lookup requests to OSV's public services. When complete, open the Security Inbox. If OSV reports findings, open a finding to inspect its evidence and recommended action. Results are stored on the device.
+> Security Scan Hub runs software security scans when the user starts them. To test the included example, open the app, select **Try an example**, and then select **Start example scan**. The app uses the bundled OSV Scanner on a sample dependency lockfile. The **Security Inbox** opens when the scan completes and labels the report **Example scan results**. Open a finding to see the affected dependency and recommended action. The home screen's **Scan my app** flow explains how to select a separate project folder with a dependency manifest or lockfile.
+>
+> OSV Scanner may send package names and versions to OSV's public services for vulnerability lookups. Results are stored on the device and can be reopened with **View previous results**. The app uses the full-trust capability to launch the bundled scanner and other native scanners the user explicitly configures and selects.
 >
 > The app does not require an account to run the bundled OSV check. Optional integrations require their own tools and may require sign-in. AI scans are disabled until configured and require explicit per-run approval. The app does not automatically upload a project or scan report to a Security Scan Hub service. Please evaluate the Store-identity package provided in this submission.
 
@@ -73,9 +83,9 @@ Before submission, replace this note if the final UI, permissions, scanner behav
 
 1. Review the completed MSIX workflow evidence for installation, scans, reports, recommendations, and payload comparison.
 2. Run Microsoft's current package checks and Windows App Certification Kit where required by Partner Center.
-3. Complete or verify pricing, markets, category, age rating, privacy URL, screenshots, description, and other required listing fields in Submission 2.
-4. Confirm that the uploaded 1.2.5.0 Store candidate is the validated package and review Partner Center validation messages.
-5. The update has been submitted and is in pre-processing. Check its certification result. After certification, select **Publish now** at the intended time and record the actual publication outcome here and in the README. Until then, 0.2.4 remains the published version.
+3. When **Start update** is available, review the carried-forward listing fields and enter the certification notes for 0.2.6.
+4. Confirm that the uploaded 1.2.6.0 Store candidate is the validated package and review Partner Center validation messages before submitting for certification.
+5. Check the certification result and record the actual publication outcome here and in the README.
 
 ## References
 
