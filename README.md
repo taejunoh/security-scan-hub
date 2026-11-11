@@ -3,7 +3,7 @@
 **Desktop prerelease 0.2.7** brings the refreshed workbench and Pretendard
 typography to the guided first-scan experience. Download the notarized Mac
 packages or the unsigned portable Windows ZIP below. The Microsoft Store
-version is distributed separately and may be earlier. The exact notarized Intel
+version is distributed separately and currently offers 0.2.5. The exact notarized Intel
 ZIP passed hosted Intel smoke; it was not tested on a physical user’s Mac.
 See the [platform validation record](docs/DESKTOP-0.2.7-VALIDATION.md).
 
@@ -108,8 +108,8 @@ In File Explorer, choose **Extract All**, then open **Sec Hub.exe** from the
 extracted folder. Keep the files together. Windows may show an unknown
 publisher warning because the ZIP is unsigned.
 
-The Microsoft Store version is distributed separately and may be earlier than
-the GitHub prerelease. The 0.2.7 update has not yet been submitted to the Store. [Open the current Store listing](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
+The Microsoft Store currently offers 0.2.5. The 0.2.7 update is in
+Microsoft certification and is not yet published. [Open the current Store listing](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
 The Store app bundles OSV Scanner and does not require a terminal, Node.js, or
 separate OSV account for a first scan.
 

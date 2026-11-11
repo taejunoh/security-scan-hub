@@ -7,8 +7,8 @@ package is unsigned. [Read the platform validation record](FIRST-SCAN-VALIDATION
 ## 1. Download and open the app
 
 Download 0.2.7 for the guided first-scan experience. The Microsoft Store
-version is distributed separately and may be earlier; the 0.2.7 update has
-not yet been submitted to the Store.
+currently offers 0.2.5. The 0.2.7 update is in Microsoft certification
+and is not yet published.
 [GitHub 0.2.7 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.7)
 
 - **Mac with Apple silicon (M-series).**
@@ -23,7 +23,7 @@ not yet been submitted to the Store.
   package, then open **Sec Hub.exe** in the extracted folder. Keep the files
   together. [Download `sec-hub-desktop-0.2.7-win32-x64-prerelease.zip`](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.7/sec-hub-desktop-0.2.7-win32-x64-prerelease.zip)
   Windows may show an unknown publisher warning because the ZIP is unsigned.
-  The Store version is distributed separately and may be earlier.
+  The Store currently offers version 0.2.5.
 
 The app window is titled **Security Scan Hub**.
 
