@@ -1,16 +1,16 @@
 # Security Scan Hub desktop
 
-Version 0.2.6 is the current desktop prerelease, with a guided first scan and
+Version 0.2.7 is the current desktop prerelease, with a guided first scan and
 an example scan. The Mac ZIPs are notarized; the portable Windows ZIP is
-unsigned. The Microsoft Store currently lists 0.2.4 while the 0.2.5 update is
-in publishing. A Store submission for 0.2.6 is not confirmed.
-[0.2.6 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.6)
+unsigned. The Microsoft Store version is distributed separately and may be
+earlier; the 0.2.7 update has not yet been submitted to the Store.
+[0.2.7 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.7)
 
-- macOS Apple silicon, Developer ID signed and notarized. [sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip)
-- macOS Intel x64, Developer ID signed and notarized. [sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip)
-- Windows x64, unsigned portable ZIP. [sec-hub-desktop-0.2.6-win32-x64-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-win32-x64-prerelease.zip)
-- Windows x64, Microsoft Store listing currently at 0.2.4. [Install Security Scan Hub](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
-- [SHA-256 checksums for all three 0.2.6 ZIPs](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-SHA256SUMS.txt)
+- macOS Apple silicon, Developer ID signed and notarized. [sec-hub-desktop-0.2.7-darwin-arm64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.7/sec-hub-desktop-0.2.7-darwin-arm64-notarized-prerelease.zip)
+- macOS Intel x64, Developer ID signed and notarized. [sec-hub-desktop-0.2.7-darwin-x64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.7/sec-hub-desktop-0.2.7-darwin-x64-notarized-prerelease.zip)
+- Windows x64, unsigned portable ZIP. [sec-hub-desktop-0.2.7-win32-x64-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.7/sec-hub-desktop-0.2.7-win32-x64-prerelease.zip)
+- Windows x64, Microsoft Store listing (version may differ). [Install Security Scan Hub](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
+- [SHA-256 checksums for all three 0.2.7 ZIPs](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.7/sec-hub-desktop-0.2.7-SHA256SUMS.txt)
 
 Extract the Mac ZIP and open `Security Scan Hub.app`, or install the Windows Store app.
 For the portable Windows ZIP, extract it and open `Sec Hub.exe`. The app window
