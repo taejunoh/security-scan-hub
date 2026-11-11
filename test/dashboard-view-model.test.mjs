@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, gateLabel, pageItems, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from '../src/web/view-model.mjs';
+import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, reportedDependencyPackages, gateLabel, pageItems, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from '../src/web/view-model.mjs';
 
 const artifacts = [
   { id: 'a'.repeat(64), kind: 'run', state: 'ready', label: 'runs/one/run.json', summary: { runId: 'same', status: 'partial', target: { path: '/alpha' }, tools: [{ id: 'osv', status: 'imported' }] } },
@@ -286,4 +286,24 @@ test('finding actions fall back to review when evidence has no supported fix', (
   assert.deepEqual(findingAction({
     toolId: 'skillspector', description: 'No saved fix', evidence: { remediation: ['wrong shape'] },
   }), { kind: 'review' });
+});
+
+
+test('dependency packages group reported findings by ecosystem, name and version and retain saved source paths', () => {
+  const findings = [
+    { toolId: 'osv', evidence: { package: { ecosystem: 'npm', name: 'shared', version: '1.2.3' }, source: { path: 'first/package-lock.json' } } },
+    { toolId: 'osv', location: { package: 'npm:shared', version: '1.2.3', path: 'second/package-lock.json' } },
+    { toolId: 'osv', location: { package: 'npm:shared', version: '1.2.3', path: 'first/package-lock.json' } },
+    { toolId: 'osv', location: { package: 'npm:shared', version: '2.0.0' } },
+    { toolId: 'osv', location: { package: 'PyPI:shared', version: '1.2.3' } },
+    { toolId: 'osv', location: { package: 'npm:shared' } },
+    { toolId: 'other', evidence: { package: { name: 'outside-osv' } } },
+    { toolId: 'osv', evidence: { affected: [{ package: { name: 'advisory-only' } }] } },
+  ];
+  assert.deepEqual(reportedDependencyPackages(findings), [
+    { ecosystem: 'npm', name: 'shared', version: '1.2.3', sources: ['first/package-lock.json', 'second/package-lock.json'], findingIndices: [0, 1, 2] },
+    { ecosystem: 'npm', name: 'shared', version: '2.0.0', sources: [], findingIndices: [3] },
+    { ecosystem: 'PyPI', name: 'shared', version: '1.2.3', sources: [], findingIndices: [4] },
+    { ecosystem: 'npm', name: 'shared', version: undefined, sources: [], findingIndices: [5] },
+  ]);
 });

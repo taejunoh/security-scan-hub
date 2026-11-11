@@ -1,6 +1,6 @@
 import { desktopToolName, initializeExecutionView } from './execution-view.mjs';
 import { translate } from './i18n.mjs';
-import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, findingSeverity, gateLabel, pageItems, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from './view-model.mjs';
+import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, findingSeverity, gateLabel, pageItems, reportedDependencyPackages, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from './view-model.mjs';
 
 const $ = (id) => document.getElementById(id);
 const desk = () => document.querySelector('.desk');
@@ -61,12 +61,20 @@ let comparisonPending = false;
 let allFindings = [];
 let activeRun;
 let filteredFindings = [];
+let reportedPackages = [];
+let dependencyPage = 1;
+let evidenceOpener;
+const wideResults = () => window.matchMedia('(min-width: 860px)').matches;
 
 const severityKeys = { critical: '치명적', high: '높음', medium: '보통', low: '낮음', info: '정보', unknown: '알 수 없음' };
 const severityName = (severity) => t(severityKeys[severity]);
 const packageLabel = ({ name, version }) => name && (version ? `${name} ${version}` : name);
 const toolName = desktopToolName;
-const projectName = (path) => typeof path === 'string' && path.split(/[\\/]/).filter(Boolean).at(-1) || t('프로젝트 검사 결과');
+function projectName({ target, projectKind }) {
+  if (projectKind === 'demo') return t('예제 프로젝트');
+  const path = target?.path;
+  return typeof path === 'string' && path.split(/[\\/]/).filter(Boolean).at(-1) || t('프로젝트 검사 결과');
+}
 function severityBadge(finding) {
   const severity = findingSeverity(finding);
   return el('span', `severity-badge severity-${severity}`, severityName(severity));
@@ -180,7 +188,7 @@ function drawCatalog() {
       await selectArtifact(artifact.id);
       if (selectedId === artifact.id && $('detail-state').hidden) focusResults();
     });
-    const name = el('span', 'artifact-name', artifact.kind === 'run' && artifact.summary ? projectName(artifact.summary.target?.path) : artifact.label);
+    const name = el('span', 'artifact-name', artifact.kind === 'run' && artifact.summary ? projectName(artifact.summary) : artifact.label);
     const meta = el('span', 'artifact-meta');
     const kind = el('span', 'tag', labelFor(artifact));
     const state = el('span', artifact.state === 'error' ? 'tag alert' : 'tag', statusFor(artifact));
@@ -214,15 +222,40 @@ function updateSnapshotChrome() {
     chromeMessage('snapshot-state', executionMode.lastRefresh || executionMode.generation > 0 ? '마지막 결과 반영 · {v0}' : '마지막 결과 반영 없음 · 시작 스냅샷 {v0}', { v0: executionMode.lastRefresh ?? catalog.snapshot.createdAt });
   } else chromeMessage('snapshot-state', '시작 스냅샷 · {v0} · 새 파일은 서버 재시작 후 반영', { v0: catalog.snapshot.createdAt });
 }
+function setReading(reading) {
+  desk().dataset.reading = reading;
+  if (!document.body.dataset.desktopView) return;
+  const current = document.body.dataset.desktopView === 'scan' ? 'scan' : reading === 'evidence' ? 'next' : 'review';
+  for (const name of ['scan', 'review', 'next']) {
+    const step = $(`journey-${name}`);
+    if (name === current) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  }
+}
+function setDesktopView(view) {
+  document.body.dataset.desktopView = view;
+  $('desktop-dependencies').hidden = view !== 'dependencies';
+  for (const [name, destination] of [['home', 'scan'], ['results', 'results'], ['dependencies', 'dependencies']]) {
+    const button = $(`desktop-nav-${name}`);
+    if (view === destination) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  }
+}
 function showDesktopScan(options) {
-  document.body.dataset.desktopView = 'scan';
-  desk().dataset.reading = 'list';
+  setDesktopView('scan');
+  setReading('list');
   executionView.showStart(options);
 }
 function showDesktopResults({ fresh = false } = {}) {
-  document.body.dataset.desktopView = 'results';
+  setDesktopView('results');
   document.body.dataset.desktopResults = fresh ? 'fresh' : 'history';
-  desk().dataset.reading = 'list';
+  setReading(wideResults() && findingView.selectedIndex !== null ? 'preview' : 'list');
+}
+function showDesktopDependencies() {
+  if (!reportedPackages.length) return;
+  setDesktopView('dependencies');
+  drawDesktopDependencies();
+  $('desktop-dependencies-title').focus();
 }
 function showDesktopHistory() {
   showDesktopResults();
@@ -256,8 +289,10 @@ async function loadDesktopHistory({ focus = false } = {}) {
 function updateExecutionMode(mode) {
   if (mode.desktop && !executionMode.desktop) {
     if (nativeSavedView()) showDesktopResults();
-    else document.body.dataset.desktopView = 'scan';
+    else setDesktopView('scan');
+    $('desktop-navigation').hidden = false;
     $('desktop-results-nav').hidden = false;
+    $('desktop-journey').hidden = false;
   }
   executionMode = mode;
   $('execution-seal').dataset.i18n = mode.desktop ? '데스크톱 검사' : mode.enabled ? '로컬 실행 가능' : '읽기 전용';
@@ -328,6 +363,7 @@ function clearDetail(message = '목록에서 저장된 검사 또는 비교를 �
   selectedArtifact = null;
   savedComparison = null;
   allFindings = [];
+  updateReportedPackages();
   delete desk().dataset.artifact;
   $('catalog-disclosure').open = true;
   chromeMessage('workspace-title', '검사 기록');
@@ -414,7 +450,7 @@ function findingCell(label, className = '') {
 function resetFindingView() {
   findingView = { query: '', severity: 'all', tool: 'all', page: 1, selectedIndex: null, locale };
   findingPage = 1;
-  document.querySelector('.desk').dataset.reading = 'list';
+  setReading('list');
   drawEvidence();
 }
 function drawFindingAction(finding, dependency) {
@@ -468,6 +504,14 @@ function drawFindingAction(finding, dependency) {
   section.append(steps);
   return section;
 }
+function openFullEvidence(opener, guidance) {
+  evidenceOpener = opener;
+  setReading('evidence');
+  const target = guidance ? $('evidence-content').querySelector('.evidence-advisory h4') : $('evidence-title');
+  target.tabIndex = -1;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
 function drawEvidence() {
   const parent = $('evidence-content');
   parent.replaceChildren();
@@ -476,23 +520,39 @@ function drawEvidence() {
     parent.append(el('p', 'evidence-empty empty-state', t('목록에서 항목을 선택하면 저장된 근거를 확인할 수 있습니다.')));
     return;
   }
-  const article = el('article', 'evidence-record');
   const dependency = findingPackage(finding);
-  const lead = el('div', 'evidence-lead');
+  const title = finding.title ?? t('제목 미기록');
   const label = packageLabel(dependency);
-  if (finding.ruleId) lead.append(el('p', 'evidence-id mono', finding.ruleId));
-  if (label) lead.append(el('p', 'evidence-package', label));
-  lead.append(severityBadge(finding), advisoryText(el('h3'), finding.title ?? t('제목 미기록')));
-  article.append(lead);
-
   const summary = [finding.description, finding.message]
     .filter((value) => typeof value === 'string')
     .map((value) => value.trim().split(/\r?\n\s*\r?\n|(?:```|~~~)/, 1)[0].trim())
     .find((value) => value);
+  const excerpt = (limit) => summary.length > limit ? `${summary.slice(0, limit).replace(/\s+\S*$/, '').trimEnd()}…` : summary;
+  if (executionMode.desktop) {
+    const preview = el('article', 'evidence-preview');
+    const heading = advisoryText(el('h3'), title);
+    heading.tabIndex = -1;
+    preview.append(severityBadge(finding), heading);
+    if (summary) preview.append(advisoryText(el('p', 'evidence-excerpt'), excerpt(240)));
+    if (label) preview.append(el('p', 'evidence-package', label));
+    const guidance = el('button', 'primary-button evidence-view-guidance', t('조치 안내 보기'));
+    const details = el('button', 'scan-link evidence-view-details', t('전체 상세 보기'));
+    guidance.type = details.type = 'button';
+    guidance.addEventListener('click', () => openFullEvidence('.evidence-view-guidance', true));
+    details.addEventListener('click', () => openFullEvidence('.evidence-view-details', false));
+    preview.append(guidance, details);
+    parent.append(preview);
+  }
+  const article = el('article', executionMode.desktop ? 'evidence-record evidence-full' : 'evidence-record');
+  const lead = el('div', 'evidence-lead');
+  lead.append(severityBadge(finding), advisoryText(el('h3'), title));
+  if (label) lead.append(el('p', 'evidence-package', label));
+  if (finding.ruleId) lead.append(el('p', 'evidence-id mono', finding.ruleId));
+  article.append(lead);
+
   if (summary) {
     const description = el('section', 'evidence-field evidence-description');
-    const excerpt = summary.length > 480 ? `${summary.slice(0, 480).replace(/\s+\S*$/, '').trimEnd()}…` : summary;
-    description.append(el('h4', '', t('문제 설명')), advisoryText(el('p'), excerpt));
+    description.append(el('h4', '', t('문제 설명')), advisoryText(el('p'), excerpt(480)));
     article.append(description);
   }
   const locations = el('section', 'evidence-field');
@@ -523,16 +583,94 @@ function drawEvidence() {
 function selectFinding(index, keyboard) {
   listScroll = window.scrollY;
   listFocusIndex = index;
+  evidenceOpener = undefined;
   findingView = transitionFindingView(allFindings, findingView, { selectedIndex: index });
   drawFindingRows();
   drawEvidence();
-  document.querySelector('.desk').dataset.reading = 'evidence';
-  if (window.matchMedia('(max-width: 1120px)').matches) {
+  setReading(executionMode.desktop ? 'preview' : 'evidence');
+  if (executionMode.desktop) {
+    const heading = $('evidence-content').querySelector('.evidence-preview h3');
+    if (!wideResults()) heading?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    heading?.focus({ preventScroll: true });
+  } else if (window.matchMedia('(max-width: 1120px)').matches) {
     $('evidence-panel').scrollIntoView({ block: 'start', behavior: 'instant' });
     $('evidence-back').focus({ preventScroll: true });
   } else if (keyboard) {
     document.querySelector(`.finding-select[data-finding-index="${index}"]`)?.focus({ preventScroll: true });
   }
+}
+function updateReportedPackages() {
+  if (!executionMode.desktop) return;
+  dependencyPage = 1;
+  reportedPackages = reportedDependencyPackages(allFindings);
+  $('desktop-nav-dependencies').hidden = !reportedPackages.length;
+  if (!reportedPackages.length && document.body.dataset.desktopView === 'dependencies') showDesktopResults();
+  if (document.body.dataset.desktopView === 'dependencies') drawDesktopDependencies();
+}
+function openDependencyFinding(index) {
+  showDesktopResults({ fresh: document.body.dataset.desktopResults === 'fresh' });
+  const finding = allFindings[index];
+  if (!filteredFindings.includes(finding)) {
+    resetFindingView();
+    const parent = $('detail-content');
+    parent.replaceChildren();
+    drawRun(parent, activeRun, selectedArtifact);
+  }
+  findingPage = Math.floor(filteredFindings.indexOf(finding) / 100) + 1;
+  selectFinding(index);
+}
+function drawDesktopDependencies() {
+  const parent = $('desktop-dependency-content');
+  parent.replaceChildren();
+  if (!activeRun) return;
+  const page = pageItems(reportedPackages, dependencyPage);
+  dependencyPage = page.page;
+  parent.append(el('p', 'dependency-scope', t('{v0}에서 취약점이 보고된 패키지만 표시합니다. 패키지 목록과 의존 관계는 이 보고서의 범위에 포함되지 않습니다.', { v0: projectName(activeRun) })));
+  const list = el('ul', 'dependency-list');
+  for (const entry of page.items) {
+    const record = el('li', 'dependency-record');
+    record.append(el('h3', 'dependency-package', packageLabel(entry)));
+    appendDefinitionGrid(record, [
+      [t('생태계'), entry.ecosystem],
+      [t('기록된 버전'), entry.version],
+    ]);
+    if (entry.sources.length) {
+      const sources = el('ul', 'dependency-sources');
+      sources.setAttribute('aria-label', t('기록된 출처'));
+      for (const path of entry.sources) {
+        const item = el('li');
+        item.append(pathDetails(path));
+        sources.append(item);
+      }
+      record.append(sources);
+    }
+    const findings = el('details', 'dependency-findings');
+    const heading = el('summary', '', t('발견 항목 {v0}건', { v0: entry.findingIndices.length }));
+    const findingsBody = el('div', 'dependency-findings-body');
+    const renderFindings = (number) => {
+      const current = pageItems(entry.findingIndices, number);
+      const items = el('ul');
+      for (const index of current.items) {
+        const finding = allFindings[index];
+        const item = el('li');
+        const button = advisoryText(el('button', 'quiet-button'), finding.title ?? t('제목 미기록'));
+        button.type = 'button';
+        button.addEventListener('click', () => openDependencyFinding(index));
+        item.append(severityBadge(finding), button);
+        items.append(item);
+      }
+      findingsBody.replaceChildren(items);
+      if (current.pages > 1) drawPager(findingsBody, current, renderFindings);
+    };
+    findings.addEventListener('toggle', () => {
+      if (findings.open && !findingsBody.hasChildNodes()) renderFindings(1);
+    });
+    findings.append(heading, findingsBody);
+    record.append(findings);
+    list.append(record);
+  }
+  parent.append(list);
+  if (page.pages > 1) drawPager(parent, page, (number) => { dependencyPage = number; drawDesktopDependencies(); });
 }
 function drawPager(parent, info, onPage) {
   const pager = el('div', 'pager');
@@ -574,14 +712,15 @@ function drawFindingRows() {
     row.dataset.selected = String(index === findingView.selectedIndex);
     const select = el('button', 'finding-select');
     const label = packageLabel(findingPackage(finding));
-    if (label) select.append(el('span', 'finding-package', label));
     select.append(advisoryText(el('span', 'finding-title'), finding.title ?? t('제목 미기록')));
+    if (label) select.append(el('span', 'finding-package', label));
     select.type = 'button';
     select.dataset.findingIndex = String(index);
     select.setAttribute('aria-pressed', String(index === findingView.selectedIndex));
+    select.setAttribute('aria-controls', 'evidence-panel');
     select.addEventListener('click', (event) => selectFinding(index, event.detail === 0));
     content.append(select);
-    const severity = findingCell(t('심각도'));
+    const severity = findingCell(t('심각도'), 'finding-cell--severity');
     severity.append(severityBadge(finding));
     row.append(content, severity);
     tbody.append(row);
@@ -671,7 +810,7 @@ function drawFindings(parent, run) {
     findingPage = findingView.page;
     drawFindingRows();
     drawEvidence();
-    if (findingView.selectedIndex === null) document.querySelector('.desk').dataset.reading = 'list';
+    if (findingView.selectedIndex === null) setReading('list');
   };
   search.addEventListener('input', apply);
   severity.addEventListener('change', apply);
@@ -684,7 +823,9 @@ function drawFindings(parent, run) {
   apply();
 }
 function drawRun(parent, run, artifact) {
-  const top = el('div');
+  const result = el('div', 'run-result');
+  const top = el('div', 'run-context');
+  if (executionMode.desktop) top.append(el('p', 'run-desktop-subtitle', t('발견 항목과 다음 조치를 확인하세요.')));
   const demo = run.projectKind === 'demo';
   const savedExample = executionMode.desktop && run.id === starterExampleId;
   if (demo || savedExample) {
@@ -704,7 +845,7 @@ function drawRun(parent, run, artifact) {
   const overview = el('div', 'run-overview');
   const runSummary = el('div', 'run-summary');
   const heading = el('div', 'section-heading');
-  heading.append(el('h3', '', projectName(run.target?.path)), safeStatusStamp(run.status));
+  heading.append(el('h3', '', projectName(run)), safeStatusStamp(run.status));
   const selectedTools = (run.tools ?? []).filter((tool) => tool.selected !== false);
   const usedTools = selectedTools.filter((tool) => tool.status !== 'skipped');
   const findings = Array.isArray(run.findings) ? run.findings : [];
@@ -761,8 +902,9 @@ function drawRun(parent, run, artifact) {
   metadata.append(el('p', 'muted', t('SAVED RUN · 원본 검사 재실행 안 함')));
   provenanceBlock(metadata, run.provenance ?? run.source);
   top.append(metadata);
-  parent.append(top);
-  drawFindings(top, run);
+  result.append(top);
+  parent.append(result);
+  drawFindings(result, run);
 }
 function comparisonTable(parent, entries, page, onPage) {
   const info = pageItems(entries ?? [], page, 100);
@@ -889,6 +1031,7 @@ async function selectArtifact(id, { projectKind } = {}) {
   savedComparison = null;
   selectedArtifact = null;
   allFindings = [];
+  updateReportedPackages();
   resetFindingView();
   $('detail-content').replaceChildren();
   delete $('detail-content').dataset.comparisonPage;
@@ -905,17 +1048,20 @@ async function selectArtifact(id, { projectKind } = {}) {
     const artifact = value.artifact;
     selectedArtifact = artifact;
     if (artifact.kind === 'run' && value.run) {
-      activeRun = projectKind === 'demo' ? { ...value.run, projectKind } : value.run;
+      const run = projectKind === 'demo' ? { ...value.run, projectKind } : value.run;
+      activeRun = run;
       desk().dataset.artifact = 'run';
       $('catalog-disclosure').open = false;
-      chromeMessage('workspace-title', '보안 받은편지함');
+      chromeMessage('workspace-title', executionMode.desktop ? '검토할 문제' : '보안 받은편지함');
       drawRun(parent, activeRun, artifact);
-      if (allFindings.length && window.matchMedia('(min-width: 1121px)').matches) {
+      updateReportedPackages();
+      if (allFindings.length && (executionMode.desktop ? wideResults() : window.matchMedia('(min-width: 1121px)').matches)) {
         findingView = transitionFindingView(allFindings, findingView, { selectedIndex: 0 });
         drawFindingRows();
         drawEvidence();
+        if (executionMode.desktop) setReading('preview');
       }
-      chromeMessage('live-status', '{v0} 검사 결과를 표시했습니다.', () => ({ v0: projectName(value.run.target?.path) }));
+      chromeMessage('live-status', '{v0} 검사 결과를 표시했습니다.', () => ({ v0: projectName(run) }));
     } else if (artifact.kind === 'comparison' && value.comparison) {
       savedComparison = value.comparison;
       desk().dataset.artifact = 'comparison';
@@ -981,7 +1127,7 @@ function applyLanguage() {
 $('language-select').addEventListener('change', () => {
   locale = $('language-select').value === 'en' ? 'en' : 'ko';
   findingView = transitionFindingView(allFindings, findingView, { locale });
-  const reading = document.querySelector('.desk').dataset.reading;
+  const reading = desk().dataset.reading;
   const scroll = window.scrollY;
   const savedPage = $('detail-content').dataset.comparisonPage;
   applyLanguage();
@@ -991,7 +1137,7 @@ $('language-select').addEventListener('change', () => {
   }
   if (activeRun) {
     $('detail-content').replaceChildren();
-    chromeMessage('workspace-title', '보안 받은편지함');
+    chromeMessage('workspace-title', executionMode.desktop ? '검토할 문제' : '보안 받은편지함');
     drawRun($('detail-content'), activeRun, selectedArtifact);
   } else if (savedComparison) {
     $('detail-content').replaceChildren();
@@ -1005,14 +1151,25 @@ $('language-select').addEventListener('change', () => {
     chromeMessage('comparison-state', '대상 {v0} · 입력 자료 해시를 함께 표시', { v0: localComparison.comparison.baseline?.target?.path ?? t('기록 없음') });
   }
   drawEvidence();
+  if (document.body.dataset.desktopView === 'dependencies') drawDesktopDependencies();
   executionView?.render();
-  document.querySelector('.desk').dataset.reading = reading;
+  setReading(reading);
   window.scrollTo({ top: scroll, behavior: 'instant' });
 });
 $('evidence-back').addEventListener('click', () => {
-  document.querySelector('.desk').dataset.reading = 'list';
+  if (executionMode.desktop && desk().dataset.reading === 'evidence') {
+    setReading('preview');
+    $('evidence-content').querySelector(evidenceOpener ?? '.evidence-preview h3')?.focus();
+    return;
+  }
+  setReading('list');
+  if (executionMode.desktop) {
+    findingView = transitionFindingView(allFindings, findingView, { selectedIndex: null });
+    drawFindingRows();
+    drawEvidence();
+  }
   const button = document.querySelector(`.finding-select[data-finding-index="${listFocusIndex}"]`);
-  button?.focus({ preventScroll: true });
+  (button ?? $('workspace-title')).focus({ preventScroll: true });
   window.scrollTo({ top: listScroll, behavior: 'instant' });
 });
 
@@ -1032,6 +1189,13 @@ $('compare-button').addEventListener('click', compareSelected);
 for (const id of ['baseline-select', 'current-select']) $(id).addEventListener('change', updateComparisonControls);
 chromeMessage('detail-state', '목록에서 저장된 검사 또는 비교를 선택하세요.');
 chromeMessage('workspace-title', '검사 기록');
+$('desktop-nav-home').addEventListener('click', () => showDesktopScan({ resume: true }));
+$('desktop-nav-results').addEventListener('click', () => {
+  if (!selectedId) return loadDesktopHistory({ focus: true });
+  showDesktopResults({ fresh: document.body.dataset.desktopResults === 'fresh' });
+  focusResults();
+});
+$('desktop-nav-dependencies').addEventListener('click', showDesktopDependencies);
 $('desktop-new-scan').addEventListener('click', () => showDesktopScan());
 for (const id of ['desktop-saved-results', 'desktop-results-history']) $(id).addEventListener('click', () => loadDesktopHistory({ focus: true }));
 async function loadNativeSavedView() {

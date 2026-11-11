@@ -280,7 +280,7 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     $('desktop-demo-note').hidden = !demo;
     $('desktop-project').hidden = demo;
     const title = $('desktop-review-title');
-    const titleText = t(demo ? '예제 검사' : '기본 검사 준비');
+    const titleText = t(active(job) ? '검사 실행 중' : demo ? '예제 검사' : '기본 검사 준비');
     if (title.textContent !== titleText) title.textContent = titleText;
     $('desktop-advanced').hidden = demo;
     const guidance = $('desktop-project-guidance');
@@ -454,12 +454,12 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
       const seconds = Number.isFinite(started) ? Math.max(0, Math.floor((end - started) / 1000)) : 0;
       $('execution-job-target').textContent = job.targetLabel;
       $('execution-phase').textContent = t(phaseKeys[job.phase] ?? '검사 실행 중');
-      $('execution-count').hidden = Boolean(desktop);
+      $('execution-count').hidden = job.progress.totalCount === 0;
       $('execution-count').textContent = t('도구 {done}/{total} · 경과 {seconds}초', { done: job.progress?.completedCount ?? 0, total: job.progress?.totalCount ?? job.toolIds.length, seconds });
       $('execution-coverage').hidden = Boolean(desktop);
       $('execution-coverage').textContent = job.runStatus ? t('검사 범위 상태: {status}', { status: t(runStatusLabel(job.runStatus)) }) : t('검사 완료와 안전 확인은 다릅니다.');
       const badges = $('execution-tool-status');
-      badges.hidden = Boolean(desktop);
+      badges.hidden = job.progress.tools.length === 0;
       badges.replaceChildren();
       for (const tool of job.progress?.tools ?? []) badges.append(make('li', 'tag', `${desktop ? desktopToolName(tool.id) : tool.id} · ${(['pending', 'checking', 'scanning'].includes(tool.status) ? t({ pending: '대기 중', checking: '확인 중', scanning: '검사 중' }[tool.status]) : toolStatusLabel(tool.status, getLocale()))}`));
     }
@@ -690,9 +690,10 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
   return {
     render: draw,
     loadHistory,
-    showStart: ({ folderGuide = false } = {}) => {
+    showStart: ({ folderGuide = false, resume = false } = {}) => {
       if (!desktop) return;
-      if (active(job) || pending) {
+      const completedReview = displayJob && job?.id === openedJobId;
+      if ((resume && !completedReview) || active(job) || pending) {
         $(desktopSteps[step][1]).focus();
         return;
       }

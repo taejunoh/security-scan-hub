@@ -147,6 +147,16 @@ test('first launch offers two routes before exposing folder, history or tool cho
   assert.equal(h.node('desktop-advanced').open ?? false, false);
 });
 
+test('returning Home preserves the in-progress folder guide while New scan starts from welcome', async () => {
+  const h = nativeHarness();
+  await h.settle();
+  await h.node('desktop-own-route').emit('click');
+  h.view.showStart({ resume: true });
+  assert.equal(h.node('desktop-folder-guide').hidden, false);
+  h.view.showStart();
+  assert.equal(h.node('desktop-welcome').hidden, false);
+});
+
 test('a demo has an explicit scan step, its own label and only runs basic OSV', async () => {
   const demo = { ...running, projectKind: 'demo' };
   const h = nativeHarness({
@@ -165,6 +175,28 @@ test('a demo has an explicit scan step, its own label and only runs basic OSV', 
   assert.deepEqual(h.calls.at(-1), ['startScan', { toolIds: ['osv'], aiConsent: false }]);
   await [...h.timers.values()][0].fn();
   assert.deepEqual(h.applied[0].slice(1), ['saved', 1, 'demo']);
+});
+
+test('desktop progress follows native tool states during an active scan', async () => {
+  const progress = { completedCount: 1, totalCount: 2, tools: [{ id: 'osv', status: 'completed' }, { id: 'skillspector', status: 'scanning' }] };
+  const h = nativeHarness({
+    chooseFolder: () => desktopState({ folderLabel: 'project' }),
+    startScan: () => ({ job: { ...running, progress } }),
+  });
+  await h.settle();
+  await h.node('desktop-own-route').emit('click');
+  await h.node('desktop-guide-choose').emit('click');
+  assert.equal(h.node('execution-progress').hidden, true);
+  await h.node('execution-start').emit('click');
+  assert.equal(h.node('execution-progress').hidden, false);
+  assert.equal(h.node('execution-count').hidden, false);
+  assert.match(h.node('execution-count').textContent, /1\/2/);
+  assert.equal(h.node('execution-tool-status').hidden, false);
+  assert.deepEqual(h.node('execution-tool-status').children.map(({ textContent }) => textContent), [
+    'OSV Scanner · Complete', 'SkillSpector · Scanning',
+  ]);
+  await [...h.timers.values()][0].fn();
+  assert.equal(h.node('execution-progress').hidden, true);
 });
 
 test('folder recovery copy is advisory and changes with locale, while unavailable examples stay on the welcome screen', async () => {

@@ -39,7 +39,7 @@ function osvAdvisoryUrl(finding) {
       && osvId(reference.slice(osvAdvisoryPrefix.length)));
 }
 
-export function findingPackage(finding) {
+function findingPackageIdentity(finding) {
   if (finding?.toolId !== 'osv') return {};
   const packageRecord = finding.evidence?.package;
   const locationPackage = nonempty(finding.location?.package) ?? '';
@@ -47,6 +47,12 @@ export function findingPackage(finding) {
   const name = nonempty(packageRecord?.name) ?? nonempty(locationPackage.slice(separator + 1));
   const version = nonempty(packageRecord?.version) ?? nonempty(finding.location?.version);
   const ecosystem = nonempty(packageRecord?.ecosystem) ?? (separator > 0 ? locationPackage.slice(0, separator) : undefined);
+  return { name, version, ecosystem };
+}
+
+export function findingPackage(finding) {
+  if (finding?.toolId !== 'osv') return {};
+  const { name, version, ecosystem } = findingPackageIdentity(finding);
   const fixedVersion = fixedPackageVersion(finding.evidence?.affected, name, ecosystem);
   const advisoryUrl = osvAdvisoryUrl(finding);
   return {
@@ -55,6 +61,21 @@ export function findingPackage(finding) {
     ...(fixedVersion ? { fixedVersion } : {}),
     ...(advisoryUrl ? { advisoryUrl } : {}),
   };
+}
+
+export function reportedDependencyPackages(findings) {
+  const packages = new Map();
+  for (const [index, finding] of asArray(findings).entries()) {
+    const { name, version, ecosystem } = findingPackageIdentity(finding);
+    if (!name) continue;
+    const key = JSON.stringify([ecosystem, name, version]);
+    if (!packages.has(key)) packages.set(key, { ecosystem, name, version, sources: new Set(), findingIndices: [] });
+    const entry = packages.get(key);
+    const source = nonempty(finding.evidence?.source?.path) ?? nonempty(finding.location?.path);
+    if (source) entry.sources.add(source);
+    entry.findingIndices.push(index);
+  }
+  return [...packages.values()].map((entry) => ({ ...entry, sources: [...entry.sources] }));
 }
 
 function actionText(value, limit = 4000) {

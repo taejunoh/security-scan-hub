@@ -77,7 +77,7 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
       const { language, selection, title, heading, welcomeHeading } = english.document;
       const preserved = english.native === expected && changed.native === expected && language === 'en' && selection === 'en'
         && title === 'Security Scan Hub / Developer Workbench' && heading === 'Security Scan Hub'
-        && welcomeHeading === 'Check the app you built';
+        && welcomeHeading === 'Check your app';
       return { expected, afterLanguage: english.native, afterDocumentTitle: changed.native, englishDocument: english.document, preserved };
     };
     await waitFor(() => invoke(`document.body.dataset.desktopView === 'scan'
@@ -105,9 +105,12 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     const initialProject = await invoke('window.secHubDesktop.getState()');
     const demoWithoutGesture = await invoke('window.secHubDesktop.chooseDemo()');
     const welcome = await invoke(`({
-      own: document.getElementById('desktop-own-route').textContent,
-      example: document.getElementById('desktop-example-route').textContent,
-      saved: document.getElementById('desktop-saved-results').textContent,
+      own: document.getElementById('desktop-own-route').textContent.trim(),
+      example: document.getElementById('desktop-example-route').textContent.trim(),
+      results: document.getElementById('desktop-nav-results').textContent.trim(),
+      homeActive: document.getElementById('desktop-nav-home').getAttribute('aria-current') === 'page',
+      resultsNavVisible: document.getElementById('desktop-nav-results').getClientRects().length > 0,
+      dependenciesHidden: document.getElementById('desktop-nav-dependencies').getClientRects().length === 0,
       resultsVisible: document.querySelector('.desk').getClientRects().length > 0,
     })`);
     summary.firstUse = {
@@ -115,7 +118,8 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
       initialJob: initialProject.job, demoWithoutGesture: demoWithoutGesture.error?.code,
     };
     summary.checks.firstUse = welcome.own === 'Scan my app' && welcome.example === 'Try an example'
-      && welcome.saved === 'View previous results' && !welcome.resultsVisible && renderer.rows === 0
+      && welcome.results === 'Scan results' && welcome.homeActive && welcome.resultsNavVisible
+      && welcome.dependenciesHidden && !welcome.resultsVisible && renderer.rows === 0
       && initialProject.projectKind === null && initialProject.job === null && demoWithoutGesture.error?.code === 'forbidden';
     if (!summary.checks.firstUse) throw Error('first_use_welcome_mismatch');
 
@@ -154,7 +158,8 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     await invoke("document.querySelector('.scan-result-example button').click()", true);
     const nextFolderGuide = await invoke("document.body.dataset.desktopView === 'scan' && !document.getElementById('desktop-folder-guide').hidden");
     await click('desktop-guide-back');
-    await click('desktop-saved-results');
+    await click('desktop-nav-results');
+    await click('desktop-results-history');
     const demoHistory = await waitFor(() => invoke(`document.body.dataset.desktopResults === 'history'
       && Array.from(document.querySelectorAll('#artifact-list button')).some((button) => button.textContent.includes('Example scan results'))`), 5000, 'demo_history_missing');
     summary.demoScan = { ...summary.demoScan, artifactId: demoArtifact.id, tools: demoArtifact.tools, outsideDemoStatus, nextFolderGuide, demoHistory };
@@ -190,18 +195,37 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     summary.savedRecommendations = await bounded(window.webContents.executeJavaScript(`(async () => {
       document.querySelector('#artifact-list button')?.click();
       while (!document.querySelector('#finding-section .finding-select')) await new Promise((resolve) => setTimeout(resolve, 100));
-      const openFinding = (title) => {
-        Array.from(document.querySelectorAll('#finding-section .finding-select'))
-          .find((button) => button.textContent.includes(title))?.click();
-        return document.querySelector('#evidence-content .evidence-advisory');
-      };
-      const dependency = openFinding('Example dependency advisory');
-      const fixedVersion = dependency?.textContent.includes('fixed version (1.1.0)') ?? false;
-      const code = openFinding('Example suggested code');
-      const suggestion = code?.querySelector('pre')?.textContent === 'validate("<fixture>");';
-      return { fixedVersion, suggestion };
+      const visible = (element) => Boolean(element?.getClientRects().length);
+      const rail = document.getElementById('desktop-nav-dependencies');
+      const dependencyNavVisible = visible(rail);
+      rail.click();
+      const packageView = document.getElementById('desktop-dependencies');
+      const packageRecord = packageView.querySelector('.dependency-record');
+      const packageRecorded = visible(packageView) && rail.getAttribute('aria-current') === 'page'
+        && packageRecord?.querySelector('.dependency-package')?.textContent === 'example 1.0.0'
+        && packageRecord?.querySelector('.dependency-sources summary')?.textContent === 'package-lock.json';
+      packageRecord?.querySelector('.dependency-findings summary')?.click();
+      while (!packageRecord?.querySelector('.dependency-findings button')) await new Promise((resolve) => setTimeout(resolve, 100));
+      packageRecord.querySelector('.dependency-findings button').click();
+      const preview = document.querySelector('#evidence-content .evidence-preview');
+      const guidance = preview?.querySelector('.evidence-view-guidance');
+      const linkedPreview = visible(preview) && visible(guidance) && preview.textContent.includes('Example dependency advisory')
+        && document.getElementById('desktop-nav-results').getAttribute('aria-current') === 'page';
+      guidance?.click();
+      const dependency = document.querySelector('#evidence-content .evidence-advisory');
+      const fixedVersion = visible(dependency) && dependency.textContent.includes('fixed version (1.1.0)');
+      document.getElementById('evidence-back').click();
+      const previewRestored = visible(preview) && document.activeElement === guidance;
+      Array.from(document.querySelectorAll('#finding-section .finding-select'))
+        .find((button) => button.textContent.includes('Example suggested code'))?.click();
+      const details = document.querySelector('#evidence-content .evidence-view-details');
+      const detailActionVisible = visible(details);
+      details?.click();
+      const code = document.querySelector('#evidence-content .evidence-advisory');
+      const suggestion = visible(code) && code.querySelector('pre')?.textContent === 'validate("<fixture>");';
+      return { dependencyNavVisible, packageRecorded, linkedPreview, fixedVersion, previewRestored, detailActionVisible, suggestion };
     })()`), 7000, 'saved_recommendations_missing');
-    if (!summary.savedRecommendations.fixedVersion || !summary.savedRecommendations.suggestion) throw Error('saved_recommendations_mismatch');
+    if (!Object.values(summary.savedRecommendations).every((value) => value === true)) throw Error('saved_recommendations_mismatch');
     const project = path.join(directory, 'controlled-project');
     await fs.mkdir(project, { mode: 0o700 });
     // A pinned, harmless package coordinate exercises the official lookup without installing packages.
@@ -214,7 +238,7 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     window.focus();
     const initialState = await invoke('window.secHubDesktop.getState()');
     const withoutGesture = await invoke('window.secHubDesktop.chooseFolder()');
-    await click('desktop-new-scan');
+    await click('desktop-nav-home');
     await click('desktop-own-route');
     const folderGuide = await invoke(`!document.getElementById('desktop-folder-guide').hidden
       && document.getElementById('desktop-folder-guide').textContent.includes('package-lock.json')`);
@@ -292,6 +316,10 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     const recommendationVisible = await invoke(`(() => {
       Array.from(document.querySelectorAll('#finding-section .finding-select'))
         .find((button) => button.textContent.includes('Advertised PHP version may be vulnerable'))?.click();
+      const guidance = document.querySelector('#evidence-content .evidence-view-guidance');
+      if (!guidance?.getClientRects().length) return false;
+      guidance.click();
+      if (!document.querySelector('#evidence-content .evidence-advisory')?.getClientRects().length) return false;
       const [check, action] = Array.from(document.querySelectorAll('#evidence-content .finding-action-steps > li'), (item) => item.textContent);
       return Boolean(check?.includes('Check first') && check.includes('actual PHP version')
         && action?.includes('Recommended action') && action.includes('If the installation is affected'));

@@ -19,7 +19,7 @@ automatically in the **Security Inbox**. An Apple silicon Mac can run all seven
 after setup. On Windows, the Cloudflare and Anthropic workflows are disabled.
 Follow the [desktop setup guide](desktop/README.md#run-a-multi-tool-scan).
 
-![Security Scan Hub 0.2.6 first-use screen with choices to scan an app or try an example](docs/images/onboarding-welcome-en.png)
+![Security Scan Hub first-use screen with choices to scan an app or try an example](docs/images/onboarding-welcome-en.png)
 
 ## Seven integrations
 
@@ -58,10 +58,10 @@ describes how results from the seven integrations were checked and combined.
 
 ![Security inbox with findings on the left and the selected advisory on the right](docs/images/security-inbox-wide.png)
 
-The screenshots show the Security Inbox with results from an OSV scan
-in the macOS 0.2.0 development build. The demo project's `lodash` 4.17.20
-dependency had four findings, two high and two medium. The 0.2.1 and 0.2.2
-prerelease packages include this inbox.
+The screenshot shows the current desktop design with saved results from an
+OSV scan of the included example project. Its `lodash` 4.17.20 dependency had
+four findings, two high and two medium. The screenshot was captured from a
+development build and does not represent a scan of your own project.
 
 The inbox puts the highest severity findings first. Start with critical and
 high findings, and confirm whether candidates affect your project. Search by
@@ -76,15 +76,6 @@ review. Expand **Original evidence and metadata** for the full record.
 
 On narrow screens, findings open in a full-width detail view. **Back to
 results** restores the search, filters, scroll position, and keyboard focus.
-
-<details>
-<summary>See the narrow layout</summary>
-
-![Narrow Security inbox with findings sorted by severity](docs/images/security-inbox-narrow-list.png)
-
-![Narrow finding detail with the advisory and Back to results button](docs/images/security-inbox-narrow-detail.png)
-
-</details>
 
 ## Download Security Scan Hub Desktop 0.2.6
 

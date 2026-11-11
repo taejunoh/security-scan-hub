@@ -11,19 +11,46 @@
 <body>
   <a class="skip-link" href="#main" data-i18n="본문으로 건너뛰기">본문으로 건너뛰기</a>
   <header class="masthead">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">SH</span><div><p class="eyebrow">LOCAL SECURITY WORKBENCH</p><h1>Security Scan Hub</h1></div></div>
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2.5c2.8 2 5.5 3 8.5 3.5v5.1c0 5.3-3.4 8.6-8.5 11-5.1-2.4-8.5-5.7-8.5-11V6c3-.5 5.7-1.5 8.5-3.5Z"/></svg>
+      <div><p class="eyebrow">LOCAL SECURITY WORKBENCH</p><h1>Security Scan Hub</h1></div>
+    </div>
+    <nav id="desktop-navigation" class="desktop-navigation" aria-label="주요 메뉴" data-i18n-aria="주요 메뉴" hidden>
+      <button id="desktop-nav-home" type="button" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10.5 8.5-7 8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1zM9.5 20.5v-6h5v6"/></svg>
+        <span data-i18n="홈">홈</span>
+      </button>
+      <button id="desktop-nav-results" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="10.75" cy="10.75" r="6.25"/><path d="m15.2 15.2 4.3 4.3"/></svg>
+        <span data-i18n="검사 결과">검사 결과</span>
+      </button>
+      <button id="desktop-nav-dependencies" type="button" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 8 9-4.75L21 8l-9 4.75L3 8Zm0 4 9 4.75L21 12M3 16l9 4.75L21 16"/></svg>
+        <span data-i18n="의존성">의존성</span>
+      </button>
+    </nav>
     <div class="mast-meta"><label class="language-control"><span data-i18n="화면 언어">화면 언어</span><select id="language-select" aria-label="화면 언어" data-i18n-aria="화면 언어"><option value="ko">KO</option><option value="en">English</option></select></label><span id="execution-seal" class="seal" data-i18n="읽기 전용">읽기 전용</span><span id="snapshot-state">시작 스냅샷 대기</span></div>
   </header>
   <main id="main" tabindex="-1">
+    <div id="desktop-journey" class="journey-steps" role="group" aria-label="검사 단계" data-i18n-aria="검사 단계" hidden>
+      <ol>
+        <li id="journey-scan" aria-current="step"><span class="journey-step-number" aria-hidden="true">1</span><span class="journey-step-label" data-i18n="검사">검사</span></li>
+        <li id="journey-review"><span class="journey-step-number" aria-hidden="true">2</span><span class="journey-step-label" data-i18n="발견 항목 검토">발견 항목 검토</span></li>
+        <li id="journey-next"><span class="journey-step-number" aria-hidden="true">3</span><span class="journey-step-label" data-i18n="다음 조치">다음 조치</span></li>
+      </ol>
+    </div>
     <section id="desktop-scan" class="scan-console" aria-label="새 검사" data-i18n-aria="새 검사" hidden>
       <section id="desktop-welcome" class="scan-welcome" aria-labelledby="desktop-scan-title">
         <header class="scan-introduction">
           <h2 id="desktop-scan-title" tabindex="-1" data-i18n="내가 만든 앱을 검사해 보세요">내가 만든 앱을 검사해 보세요</h2>
-          <p data-i18n="직접 만든 웹사이트나 앱의 코드 폴더에서 알려진 보안 문제를 찾습니다. 컴퓨터 전체의 바이러스 검사는 아니며, 웹사이트 주소만으로는 기본 검사를 할 수 없습니다.">직접 만든 웹사이트나 앱의 코드 폴더에서 알려진 보안 문제를 찾습니다. 컴퓨터 전체의 바이러스 검사는 아니며, 웹사이트 주소만으로는 기본 검사를 할 수 없습니다.</p>
+          <p data-i18n="앱의 코드 폴더에서 알려진 보안 문제를 찾고, 발견 항목과 다음 조치를 확인하세요.">앱의 코드 폴더에서 알려진 보안 문제를 찾고, 발견 항목과 다음 조치를 확인하세요.</p>
         </header>
         <div class="scan-routes">
           <div class="scan-route">
-            <button id="desktop-own-route" class="primary-button" type="button" aria-describedby="desktop-own-route-note" data-i18n="내가 만든 앱 검사">내가 만든 앱 검사</button>
+            <button id="desktop-own-route" class="primary-button" type="button" aria-describedby="desktop-own-route-note">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 3.5 10 6.5-10 6.5v-13Z"/></svg>
+              <span data-i18n="내가 만든 앱 검사">내가 만든 앱 검사</span>
+            </button>
             <p id="desktop-own-route-note" data-i18n="앱의 코드가 들어 있는 폴더를 찾아 선택하세요.">앱의 코드가 들어 있는 폴더를 찾아 선택하세요.</p>
           </div>
           <div class="scan-route scan-route-example">
@@ -31,6 +58,15 @@
             <p id="desktop-example-route-note" data-i18n="함께 제공된 예제 앱으로 검사와 결과 보기를 체험하세요.">함께 제공된 예제 앱으로 검사와 결과 보기를 체험하세요.</p>
           </div>
         </div>
+        <div class="scan-flow">
+          <h3 data-i18n="검사 순서">검사 순서</h3>
+          <ol>
+            <li data-i18n="내 앱이나 예제를 검사합니다.">내 앱이나 예제를 검사합니다.</li>
+            <li data-i18n="발견 항목과 근거를 검토합니다.">발견 항목과 근거를 검토합니다.</li>
+            <li data-i18n="안내에 따라 조치한 뒤 다시 검사합니다.">안내에 따라 조치한 뒤 다시 검사합니다.</li>
+          </ol>
+        </div>
+        <p class="scan-scope-note" data-i18n="기본 검사에는 앱의 코드 폴더가 필요합니다. 웹사이트 주소만으로는 검사할 수 없으며, 컴퓨터 전체의 바이러스를 검사하지 않습니다.">기본 검사에는 앱의 코드 폴더가 필요합니다. 웹사이트 주소만으로는 검사할 수 없으며, 컴퓨터 전체의 바이러스를 검사하지 않습니다.</p>
         <button id="desktop-saved-results" class="scan-link" type="button" data-i18n="이전 결과 보기">이전 결과 보기</button>
       </section>
       <section id="desktop-folder-guide" class="scan-guide" aria-labelledby="desktop-folder-title" hidden>
@@ -102,6 +138,10 @@
         <button id="desktop-recheck" class="quiet-button" type="button" disabled hidden data-i18n="도구 상태 다시 확인">도구 상태 다시 확인</button>
       </div>
     </section>
+    <section id="desktop-dependencies" class="dependency-view" aria-labelledby="desktop-dependencies-title" hidden>
+      <h2 id="desktop-dependencies-title" tabindex="-1" data-i18n="취약점이 보고된 패키지">취약점이 보고된 패키지</h2>
+      <div id="desktop-dependency-content"></div>
+    </section>
     <div id="desktop-results-nav" class="desktop-results-nav" hidden>
       <button id="desktop-new-scan" class="quiet-button" type="button" data-i18n="새 검사">새 검사</button>
       <button id="desktop-results-history" class="scan-link" type="button" data-i18n="이전 결과 보기">이전 결과 보기</button>
@@ -159,7 +199,7 @@
       <aside id="evidence-panel" class="evidence-panel panel" aria-labelledby="evidence-title">
         <div class="section-heading">
           <button id="evidence-back" class="quiet-button" type="button" data-i18n="결과로 돌아가기">결과로 돌아가기</button>
-          <h2 id="evidence-title" data-i18n="취약점 상세">취약점 상세</h2>
+          <h2 id="evidence-title" tabindex="-1" data-i18n="취약점 상세">취약점 상세</h2>
         </div>
         <div id="evidence-content"><p class="evidence-empty empty-state" data-i18n="목록에서 항목을 선택하면 저장된 근거를 확인할 수 있습니다.">목록에서 항목을 선택하면 저장된 근거를 확인할 수 있습니다.</p></div>
       </aside>

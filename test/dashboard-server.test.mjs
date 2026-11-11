@@ -190,3 +190,15 @@ test('serves only the exact local locale module with JavaScript MIME and existin
     assert.match(await rawRequest(port, ['GET /assets/i18n.mjs HTTP/1.1', `Host: 127.0.0.1:${port}`, 'Origin: http://evil.example', 'Connection: close']), /^HTTP\/1\.1 403/);
   } finally { await dashboard.close(); }
 }));
+
+test('serves the bundled font with same-origin-only policy', async () => sandbox(async (root) => {
+  const dashboard = await startDashboard({ runs: root, port: 0 });
+  try {
+    const response = await fetch(new URL('/assets/PretendardVariable.woff2', dashboard.url));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'font/woff2');
+    assert.match(response.headers.get('content-security-policy'), /font-src 'self'/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(new URL('../src/web/fonts/PretendardVariable.woff2', import.meta.url)));
+    assert.equal((await fetch(new URL('/assets/fonts/OFL.txt', dashboard.url))).status, 404);
+  } finally { await dashboard.close(); }
+}));
