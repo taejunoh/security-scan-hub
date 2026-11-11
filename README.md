@@ -1,23 +1,25 @@
 # Security Scan Hub
 
-**In development:** The 0.2.6 candidate adds a guided first scan, a real example scan,
-and the new Security Scan Hub app name and icon. [Preview the first-scan guide](docs/FIRST-SCAN-PREVIEW.md).
-The candidate passed packaged scans on hosted Intel macOS, Apple silicon macOS,
-and Windows x64; its Windows MSIX also passed install-and-scan checks. These
-checks do not replace hands-on testing on a physical Intel Mac. This candidate
-is not yet included in the downloads below.
+**New desktop prerelease: 0.2.6.** It adds guided first use, an example scan,
+and the Security Scan Hub name and icon. Download the notarized Mac packages
+or the portable Windows ZIP below. The Microsoft Store currently offers 0.2.4;
+its 0.2.5 update is in publishing, and no 0.2.6 Store submission is
+confirmed. The exact notarized Intel ZIP passed hosted Intel smoke, but this
+is not a physical-user Mac test. See the [platform validation record](docs/FIRST-SCAN-VALIDATION.md).
 
 **Run seven security tools in a single scan. Review the results in one place.**
 Security Scan Hub combines dependency checks, AI skill scanning, code review,
 and URL checks in one report. See the findings and which tools completed,
 were skipped, or failed. Results are available as HTML, JSON, and SARIF.
 
-**Desktop quick start.** [Choose your Mac or Windows download](#download-security-scan-hub-desktop-024)
+**Desktop quick start.** [Choose your Mac or Windows download](#download-security-scan-hub-desktop-026)
 and run Google OSV Scanner without a terminal. To run multiple tools,
 select them in the app and click **Start scan**. The combined report opens
 automatically in the **Security Inbox**. An Apple silicon Mac can run all seven
 after setup. On Windows, the Cloudflare and Anthropic workflows are disabled.
 Follow the [desktop setup guide](desktop/README.md#run-a-multi-tool-scan).
+
+![Security Scan Hub 0.2.6 first-use screen with choices to scan an app or try an example](docs/images/onboarding-welcome-en.png)
 
 ## Seven integrations
 
@@ -84,47 +86,43 @@ results** restores the search, filters, scroll position, and keyboard focus.
 
 </details>
 
-## Download Security Scan Hub Desktop 0.2.4
+## Download Security Scan Hub Desktop 0.2.6
 
-Version 0.2.4 remains the current published Windows Store version and the
-available Mac release. The Windows 0.2.5 update has been submitted for
-certification and is in pre-processing. It will remain unavailable until it
-passes certification and is manually published. See the [Windows 0.2.5
-validation record](docs/WINDOWS-0.2.5-VALIDATION.md). Select several security
-tools, start one scan, and review their findings and run status together in
-the **Security Inbox**.
+Select several security tools, start one scan, and review findings and run
+status together in the **Security Inbox**. Version 0.2.6 is a prerelease.
 
 ### Install on Mac (Apple silicon)
 
-1. Download the Developer ID-signed and notarized package. [Download Apple silicon ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-darwin-arm64-notarized-prerelease.zip)
+1. Download the Developer ID-signed and notarized package: [sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip).
 2. In Finder, double-click the ZIP to extract it.
-3. Open **Sec Hub.app**. The app window is titled **Security Scan Hub**.
+3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
 
 The Apple silicon package supports M-series Macs and can run all seven
 integrations after setup.
 
 ### Install on Mac (Intel)
 
-1. Download the signed and notarized Intel package. [Download Intel Mac ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-darwin-x64-notarized-prerelease.zip)
+1. Download the signed and notarized Intel package: [sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip).
 2. In Finder, double-click the ZIP to extract it.
-3. Open **Sec Hub.app**. The app window is titled **Security Scan Hub**.
+3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
 
-The Intel package bundles OSV Scanner for a first scan without Terminal.
-It requires macOS 13 or later. Release validation covers the bundled OSV scan
-on macOS 15 on Intel.
+The Intel package bundles OSV Scanner for a first scan without Terminal and
+requires macOS 13 or later. The exact notarized ZIP passed packaged smoke on a
+hosted Intel Mac. This is not a hands-on test on a physical user Mac.
 
 ### Install on Windows (x64)
 
-**Available now:** Install the published app directly from the Microsoft Store.
+**For the 0.2.6 prerelease:** [Download the unsigned Windows x64 portable ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-win32-x64-prerelease.zip).
+In File Explorer, choose **Extract All**, then open **Sec Hub.exe** from the
+extracted folder. Keep the files together. Windows may show an unknown
+publisher warning because the ZIP is unsigned.
 
-1. On your Windows PC, open [Security Scan Hub in the Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
-2. Select **Download**, **Get**, or **Install**. Confirm that the app is **Security Scan Hub** by **All in Simple**.
-3. Open **Security Scan Hub** from the Start menu, then follow [Run your first scan](#run-your-first-scan-with-024).
-
-The published Store app (0.2.4) supports Intel and AMD x64 PCs running Windows
-10 version 2004 or later, or Windows 11. OSV Scanner is included: you do not need a terminal,
-Node.js, or a separate OSV account for your first scan. Microsoft handles the
-Store package signature; you do not need to install a certificate.
+The Microsoft Store currently publishes version 0.2.4 for Intel and AMD x64
+PCs running Windows 10 version 2004 or later, or Windows 11. The 0.2.5 update
+is in publishing and has not propagated to the listing yet. No Store
+submission for 0.2.6 is confirmed. [Open the current Store listing](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
+The Store app bundles OSV Scanner and does not require a terminal, Node.js, or
+separate OSV account for a first scan.
 
 **Verified November 10, 2026:** Store installation, folder selection, a bundled
 OSV scan, and the results screen with recommended actions worked on Windows 11
@@ -136,39 +134,23 @@ Up to five integrations are available after setup. The Cloudflare and
 Anthropic workflows are disabled on Windows. Other tools may need their own
 installation and provider sign-in.
 
-For Windows 0.2.5 coverage, see the [validation record](docs/WINDOWS-0.2.5-VALIDATION.md).
-Windows Codex Security 0.7.0 needs an opt-in local compatibility plugin; this
-does not automatically fix the upstream package ([setup](desktop/README.md#windows-codex-security-070-setup)).
-
-<details>
-<summary>Alternative: portable Windows ZIP (unsigned prerelease)</summary>
-
-1. [Download the Windows x64 ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-win32-x64-prerelease.zip).
-2. In File Explorer, right-click the ZIP and choose **Extract All**.
-3. Open **Sec Hub.exe** from the extracted folder. Keep the extracted files together.
-
-This ZIP is unsigned and may trigger an unknown publisher warning. The
-Microsoft Store installation above is the recommended option.
-
-</details>
-
 OSV Scanner is bundled on all three platforms. Other tools require setup, and AI
-tools require provider sign-in and consent. [Browse all release assets](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.4)
-· [Verify ZIP checksums](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.4/sec-hub-desktop-0.2.4-SHA256SUMS.txt)
+tools require provider sign-in and consent. [Browse all 0.2.6 release assets](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.6)
+· [Verify ZIP checksums](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-SHA256SUMS.txt)
 
 The earlier OSV-only [0.2.1 prerelease](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.1) is still
 available for users who need that version.
 
-## Run your first scan with 0.2.4
+## Run your first scan with 0.2.6
 
-1. In **Project security scan**, click **Choose folder** and select the project
-   folder you want to check. For a first scan, choose the root folder of a
-   JavaScript project that contains `package-lock.json`. If the app opens in
-   Korean, select **English** at the top of the window.
-2. Keep **OSV Scanner** selected and click **Start scan**. OSV Scanner is
-   bundled, so this first scan needs no other setup.
-3. When the scan finishes, the **Security Inbox** opens the report.
-   To open it later, choose **File → Show recent scans**.
+1. To try the app without your own project, choose **Try an example**, then
+   **Start example scan**. The bundled OSV Scanner checks a small included
+   example; it does not run example code or check your own project.
+2. To scan your own code, choose **Scan my app**, select **Choose folder**,
+   and pick the folder containing your app's source and package files. Extract
+   a source ZIP first. Choose **Start basic scan**.
+3. When the scan finishes, review findings and **What to do next** in the
+   report. Use **View previous results** to reopen saved reports later.
 
 A completed scan with no findings means OSV Scanner found no known
 vulnerabilities in the dependencies it checked. If the scan fails, check the

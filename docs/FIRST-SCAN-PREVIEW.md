@@ -1,10 +1,10 @@
-# Your first scan — 0.2.6 development preview
+# Your first scan — 0.2.6
 
-This guide describes the local 0.2.6 candidate. It is not yet a downloadable
-release. The published 0.2.4 app has the older first screen; use the
-[released-app guide](GETTING-STARTED.md) for that version.
+This guide describes the 0.2.6 desktop prerelease. The current Microsoft Store
+version has the older first screen. See the [installation guide](GETTING-STARTED.md)
+for downloads and current Store availability.
 
-![First-use choices in the 0.2.6 development app](images/onboarding-welcome-en.png)
+![First-use choices in the 0.2.6 desktop app](images/onboarding-welcome-en.png)
 
 ## What does the app check?
 
@@ -42,7 +42,7 @@ your whole Documents folder, or a folder containing only photos and PDFs.
 A website address alone is not a code folder. If someone else built your app,
 ask them for its source-code folder or repository download.
 
-![Folder guidance in the 0.2.6 development app](images/onboarding-folder-guide-en.png)
+![Folder guidance in the 0.2.6 desktop app](images/onboarding-folder-guide-en.png)
 
 The folder hint is a quick filename check, not proof that every file is
 supported. If it finds no recognizable package files, choose another folder

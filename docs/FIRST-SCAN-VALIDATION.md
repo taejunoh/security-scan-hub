@@ -1,8 +1,9 @@
 # First-scan onboarding validation — 2026-11-11
 
-Local desktop candidate **0.2.6**, branch `codex/first-scan-onboarding`,
-based on `1ea89b21ce419f014d2e5dd8ad0f5b9745b4d5c0`.
-This work has not been published to GitHub Releases or Microsoft Store.
+Security Scan Hub Desktop **0.2.6** is published as a GitHub prerelease.
+The Microsoft Store currently lists 0.2.4; its 0.2.5 update is in publishing.
+A Microsoft Store submission for 0.2.6 is not confirmed.
+[Download the 0.2.6 release assets](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.6).
 
 ## Behavior verified
 
@@ -85,24 +86,24 @@ the result was verified on screen. This is not a physical Windows PC test.
 Both macOS 0.2.6 ZIPs were signed with Developer ID and notarized by Apple.
 The extracted final ZIPs passed signature, stapled ticket, and Gatekeeper
 checks. The final arm64 ZIP passed packaged smoke natively on Apple silicon;
-the final x64 ZIP passed packaged smoke under Rosetta. Native Intel testing of
-the exact notarized ZIP remains outstanding.
+the final x64 ZIP also passed packaged smoke under Rosetta on Apple silicon.
+The exact notarized x64 ZIP then passed a native packaged smoke on a hosted
+Intel Mac in [run 43093795722](https://github.com/taejunoh/security-scan-hub/actions/runs/43093795722).
+That hosted runner result does not claim testing on a physical user's Intel Mac.
 
-## Local package receipts
+The Windows x64 package passed hosted install-and-scan checks, and the Windows
+11 ARM64 virtual machine displayed the portable x64 app under emulation. These
+checks do not establish behavior on a physical Windows PC.
 
-| Target | ZIP SHA-256 |
-| --- | --- |
-| darwin-arm64 | `aa4dc684996d8fad59051bf253159a1a20800d20e01177eb1c6672a14ea87c19` |
-| darwin-x64 | `0f847592a0b77bcb5be53c0a09c4ce1d0e55c2e3161746b43112969ff5079091` |
+## Release package receipts
 
-Local evidence, relative to the workspace's `work/` directory:
+| Target | Release ZIP | ZIP SHA-256 |
+| --- | --- | --- |
+| darwin-arm64 | [sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-arm64-notarized-prerelease.zip) | `aa4dc684996d8fad59051bf253159a1a20800d20e01177eb1c6672a14ea87c19` |
+| darwin-x64 | [sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-darwin-x64-notarized-prerelease.zip) | `0f847592a0b77bcb5be53c0a09c4ce1d0e55c2e3161746b43112969ff5079091` |
 
-- `onboarding-026-verified-arm64/` and `onboarding-026-verified-x64/`: development ZIPs, manifests, signature logs.
-- `onboarding-026-verified-smoke-arm64/smoke-evidence.json`: final packaged smoke and actual reports.
-- `onboarding-026-verification/`: native screenshots, 360px rendering screenshot, test logs, and evidence hashes.
+[Windows x64 portable ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-win32-x64-prerelease.zip) · [SHA-256 checksums](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.6/sec-hub-desktop-0.2.6-SHA256SUMS.txt)
 
-These are development packages, not newly notarized public releases. Windows
-assets and shared behavior have automated coverage, but this onboarding build
-has not been installed on Windows. Physical Intel testing and an uncoached
-first-time nondeveloper usability test remain separate release/user-validation
-steps; the automated/native walkthrough is not a substitute for that user test.
+An uncoached first-time nondeveloper usability test remains separate from this
+automated and native walkthrough. The hosted Intel smoke does not substitute
+for an uncoached test on a user's physical Mac.
