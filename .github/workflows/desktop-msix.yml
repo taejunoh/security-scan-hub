@@ -98,6 +98,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $appVersion = (Get-Content 'desktop/app/package.json' -Raw | ConvertFrom-Json).version.Split('.')
+          if ($appVersion.Count -ne 3 -or ($appVersion | Where-Object { $_ -notmatch '^\d+$' })) { throw 'Invalid app version' }
+          $msixVersion = "$([int]$appVersion[0] + 1).$($appVersion[1]).$($appVersion[2]).0"
           node desktop/msix/build.mjs `
             --source "$env:RUNNER_TEMP/sec-hub-msix-build/desktop/package/Sec Hub" `
             --out "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test" `
@@ -105,7 +108,7 @@ jobs:
             --publisher 'CN=Security Scan Hub CI' `
             --publisher-display-name 'Security Scan Hub CI' `
             --display-name 'Security Scan Hub CI' `
-            --version '1.2.6.0'
+            --version $msixVersion
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Sign temporarily, install, register in Start and verify scan and report
         shell: powershell
@@ -142,6 +145,9 @@ jobs:
               [string]::IsNullOrWhiteSpace($env:STORE_DISPLAY_NAME)) {
             throw 'Provide all four Partner Center identity fields to build a Store candidate'
           }
+          $appVersion = (Get-Content 'desktop/app/package.json' -Raw | ConvertFrom-Json).version.Split('.')
+          if ($appVersion.Count -ne 3 -or ($appVersion | Where-Object { $_ -notmatch '^\d+$' })) { throw 'Invalid app version' }
+          $msixVersion = "$([int]$appVersion[0] + 1).$($appVersion[1]).$($appVersion[2]).0"
           node desktop/msix/build.mjs `
             --source "$env:RUNNER_TEMP/sec-hub-msix-build/desktop/package/Sec Hub" `
             --out "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate" `
@@ -149,7 +155,7 @@ jobs:
             --publisher $env:STORE_PUBLISHER `
             --publisher-display-name $env:STORE_PUBLISHER_DISPLAY_NAME `
             --display-name $env:STORE_DISPLAY_NAME `
-            --version '1.2.6.0'
+            --version $msixVersion
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $testMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test/msix-identity.json" -Raw | ConvertFrom-Json
           $storeMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate/msix-identity.json" -Raw | ConvertFrom-Json
