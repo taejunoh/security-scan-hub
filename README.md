@@ -2,7 +2,10 @@
 
 **In development:** The 0.2.6 candidate adds a guided first scan, a real example scan,
 and the new Security Scan Hub app name and icon. [Preview the first-scan guide](docs/FIRST-SCAN-PREVIEW.md).
-This is not yet included in the downloads below.
+The candidate passed packaged scans on hosted Intel macOS, Apple silicon macOS,
+and Windows x64; its Windows MSIX also passed install-and-scan checks. These
+checks do not replace hands-on testing on a physical Intel Mac. This candidate
+is not yet included in the downloads below.
 
 **Run seven security tools in a single scan. Review the results in one place.**
 Security Scan Hub combines dependency checks, AI skill scanning, code review,

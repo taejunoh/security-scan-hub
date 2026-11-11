@@ -65,6 +65,29 @@ No security checks were bypassed and no cause for the dialog delay is claimed.
 
 </details>
 
+## Hosted validation of commit 8e22c1d
+
+[Desktop validation run 43090632928](https://github.com/taejunoh/security-scan-hub/actions/runs/43090632928)
+completed successfully on hosted macOS x64, macOS arm64, and Windows x64.
+Each packaged application passed all ten smoke checks, including first use,
+actual bundled OSV demo, a separate folder scan, and report opening.
+The macOS x64 runner verifies an Intel execution environment; it is not an
+uncoached test on a user's physical Intel Mac.
+
+[MSIX validation run 43090788309](https://github.com/taejunoh/security-scan-hub/actions/runs/43090788309)
+installed a disposable test-identity MSIX on Windows x64 and passed all ten
+smoke checks. It is not the Microsoft Store-signed release package. A separate Windows 11
+ARM64 virtual machine also displayed the portable x64 app under emulation; a
+real example scan produced four findings and showed the 4.17.21 recommendation.
+The guest's raw report could not be retrieved after its guest agent timed out;
+the result was verified on screen. This is not a physical Windows PC test.
+
+Both macOS 0.2.6 ZIPs were signed with Developer ID and notarized by Apple.
+The extracted final ZIPs passed signature, stapled ticket, and Gatekeeper
+checks. The final arm64 ZIP passed packaged smoke natively on Apple silicon;
+the final x64 ZIP passed packaged smoke under Rosetta. Native Intel testing of
+the exact notarized ZIP remains outstanding.
+
 ## Local package receipts
 
 | Target | ZIP SHA-256 |
