@@ -73,6 +73,7 @@ const errors = {
   reports_failed: '보고서 저장에 실패했습니다. 결과를 반영할 수 없습니다.',
 };
 const desktopErrors = {
+  demo_unavailable: '예제 검사를 준비하지 못했습니다. 앱을 다시 열거나 직접 만든 앱을 검사하세요.',
   target_not_found: '검사할 폴더를 먼저 선택하세요.',
   target_unavailable: '이 폴더를 열 수 없습니다. 접근할 수 있는 프로젝트 폴더를 선택하세요.',
   tool_unavailable: '선택한 도구를 실행할 수 없습니다. 도구 상태를 다시 확인하세요.',
@@ -111,6 +112,9 @@ const validJob = (job) => record(job)
   && Array.isArray(job.progress.tools) && job.progress.tools.every((tool) => record(tool) && typeof tool.id === 'string' && typeof tool.status === 'string');
 const validDesktopState = (state) => record(state)
   && (state.folderLabel === null || (typeof state.folderLabel === 'string' && state.folderLabel.length > 0))
+  && (state.projectKind == null || ['folder', 'demo'].includes(state.projectKind))
+  && (state.projectGuidance == null || (record(state.projectGuidance)
+    && ['recognized', 'not-detected', 'limited'].includes(state.projectGuidance.status) && strings(state.projectGuidance.examples)))
   && (state.nodeConfigured === undefined || typeof state.nodeConfigured === 'boolean')
   && (state.configLabel == null || typeof state.configLabel === 'string')
   && Number.isSafeInteger(state.generation) && state.generation >= 0
@@ -157,8 +161,13 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
   let toolSignature = '';
   const toolNodes = new Map();
   let folderLabel = null;
+  let projectKind = null;
+  let projectGuidance = null;
+  let step = 'welcome';
+  let displayJob = false;
   let configLabel = null;
   let nodeConfigured = false;
+  let initialDesktopLoad;
   let readiness = [];
   let readinessSignature = '';
   const readinessNodes = new Map();
@@ -246,6 +255,55 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     draw();
   }
 
+  const desktopSteps = {
+    welcome: ['desktop-welcome', 'desktop-scan-title'],
+    folder: ['desktop-folder-guide', 'desktop-folder-title'],
+    review: ['desktop-review', 'desktop-review-title'],
+  };
+  function showStep(next) {
+    step = next;
+    if (enabled) message = '';
+    draw();
+    $(desktopSteps[step][1]).focus();
+  }
+  function drawOnboarding() {
+    const busy = pending || active(job);
+    const demo = projectKind === 'demo';
+    const canChoose = enabled && !busy;
+    const basicReady = readiness.some((tool) => tool.id === 'osv' && readyTool(tool));
+    for (const [name, [id]] of Object.entries(desktopSteps)) $(id).hidden = step !== name;
+    $('desktop-own-route').disabled = busy;
+    $('desktop-guide-back').disabled = busy;
+    $('desktop-guide-choose').disabled = !canChoose;
+    $('desktop-example-route').disabled = !canChoose || typeof desktop.chooseDemo !== 'function';
+    $('desktop-review-back').disabled = busy;
+    $('desktop-demo-note').hidden = !demo;
+    $('desktop-project').hidden = demo;
+    const title = $('desktop-review-title');
+    const titleText = t(demo ? '예제 검사' : '기본 검사 준비');
+    if (title.textContent !== titleText) title.textContent = titleText;
+    $('desktop-advanced').hidden = demo;
+    const guidance = $('desktop-project-guidance');
+    const status = projectGuidance?.status;
+    guidance.hidden = !status;
+    guidance.dataset.state = status ?? '';
+    const files = projectGuidance?.examples.join(', ');
+    const guidanceText = status === 'recognized'
+      ? t('패키지 목록을 찾았습니다. {files}', { files })
+      : status === 'not-detected'
+        ? t('패키지 목록을 찾지 못했습니다. ZIP의 압축을 풀고 package-lock.json 같은 파일이 있는 앱 폴더를 선택해 보세요.')
+        : status === 'limited'
+          ? t('이 폴더의 파일을 일부만 확인했습니다. 앱의 코드 폴더인지 확인하거나 더 작은 앱 폴더를 선택해 보세요.')
+          : '';
+    if (guidance.textContent !== guidanceText) guidance.textContent = guidanceText;
+    const source = $('desktop-source-status');
+    const sourceText = step === 'review' || !message ? '' : t(message);
+    if (source.textContent !== sourceText) source.textContent = sourceText;
+    $('desktop-recheck').hidden = enabled && (step !== 'review' || basicReady);
+    $('desktop-recheck').disabled = pending || (enabled && active(job));
+    $('desktop-advanced-recheck').disabled = $('desktop-recheck').disabled;
+  }
+
   function drawReadiness() {
     const busy = pending || active(job);
     const folder = $('desktop-folder');
@@ -253,7 +311,6 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     if (folder.textContent !== folderText) folder.textContent = folderText;
     $('desktop-choose-folder').textContent = t(folderLabel ? '폴더 변경' : '폴더 선택');
     $('desktop-choose-folder').disabled = !enabled || busy;
-    $('desktop-recheck').disabled = pending || (enabled && active(job));
     $('desktop-config').hidden = typeof desktop.chooseConfig !== 'function';
     $('desktop-choose-config').disabled = !enabled || busy;
     $('desktop-config-label').textContent = configLabel ?? t('선택한 도구 설정 없음');
@@ -324,7 +381,7 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
       authentication.textContent = t(authenticationLabels[tool.authentication]);
       if (checkbox) {
         checkbox.checked = selection.toolIds.includes(tool.id);
-        checkbox.disabled = !folderLabel || !enabled || busy;
+        checkbox.disabled = !folderLabel || !enabled || busy || projectKind === 'demo';
       }
       for (const [action, button] of buttons) {
         button.textContent = t(setupLabels[action]);
@@ -357,35 +414,52 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
       }
     }
   }
+  function desktopStatus(visibleJob) {
+    if (visibleJob?.state === 'failed') {
+      return t(desktopErrors[visibleJob.errorCode] ?? errors[visibleJob.errorCode] ?? '검사를 완료하지 못했습니다. 연결을 확인하고 다시 시도하세요.');
+    }
+    if (visibleJob) return executionStatus(visibleJob, getLocale());
+    if (selection.toolIds.length) return '';
+    if (projectKind === 'demo') return t(desktopErrors.demo_unavailable);
+    return t(readiness.some(readyTool) ? '고급 도구 설정에서 검사할 도구를 선택하세요.' : '기본 검사 도구를 사용할 수 없습니다. 고급 도구 설정을 열거나 도구 상태를 다시 확인하세요.');
+  }
   function draw() {
     if (!desktop && !bearer && !message) return;
     $('execution-panel').hidden = false;
-    if (desktop) drawReadiness(); else drawTools();
+    if (desktop) { drawReadiness(); drawOnboarding(); } else drawTools();
     const controls = executionControls({ authenticated: Boolean(desktop || bearer), enabled, selection, job, pending, quotaReached });
     $('execution-target').disabled = controls.inputsDisabled;
     $('execution-toolset').disabled = controls.inputsDisabled;
     for (const [id, node] of toolNodes) { node.disabled = controls.inputsDisabled; node.checked = selection.toolIds.includes(id); }
     $('execution-start').disabled = controls.startDisabled || Boolean(desktop && (!validPHPSelection() || (usesAI() && !$('desktop-ai-consent').checked)));
+    if (desktop) {
+      const start = $('execution-start');
+      start.textContent = t(projectKind === 'demo' ? '예제 검사 시작' : selection.toolIds.length === 1 && selection.toolIds[0] === 'osv' ? '기본 검사 시작' : '검사 시작');
+      start.hidden = active(job);
+    }
     $('execution-cancel').disabled = controls.cancelDisabled;
     $('execution-refresh').disabled = controls.refreshDisabled;
-    $('execution-refresh').hidden = !terminal(job) || !job?.reportsReady || Boolean(desktop && job.id === openedJobId);
+    $('execution-refresh').hidden = !terminal(job) || !job?.reportsReady || Boolean(desktop && (!displayJob || job.id === openedJobId));
     $('execution-cancel').hidden = !active(job);
     const status = $('execution-status');
-    const guidance = !folderLabel ? '검사할 폴더를 먼저 선택하세요.' : selection.toolIds.length ? '준비되었습니다. 검사를 시작할 수 있습니다.' : '사용할 도구의 설치와 준비 상태를 확인하세요.';
-    const statusText = message ? t(message) : desktop && !job ? t(guidance) : executionStatus(job, getLocale());
+    const visibleJob = desktop && !displayJob ? null : job;
+    const statusText = message ? t(message) : desktop ? desktopStatus(visibleJob) : executionStatus(job, getLocale());
     if (status.textContent !== statusText) status.textContent = statusText;
-    status.dataset.state = job?.state ?? 'idle';
+    status.dataset.state = visibleJob?.state ?? 'idle';
     const progress = $('execution-progress');
-    progress.hidden = !job;
-    if (job) {
+    progress.hidden = desktop ? !active(visibleJob) : !visibleJob;
+    if (!progress.hidden) {
       const started = Date.parse(job.startedAt);
       const end = Date.parse(job.completedAt) || Date.now();
       const seconds = Number.isFinite(started) ? Math.max(0, Math.floor((end - started) / 1000)) : 0;
       $('execution-job-target').textContent = job.targetLabel;
       $('execution-phase').textContent = t(phaseKeys[job.phase] ?? '검사 실행 중');
+      $('execution-count').hidden = Boolean(desktop);
       $('execution-count').textContent = t('도구 {done}/{total} · 경과 {seconds}초', { done: job.progress?.completedCount ?? 0, total: job.progress?.totalCount ?? job.toolIds.length, seconds });
+      $('execution-coverage').hidden = Boolean(desktop);
       $('execution-coverage').textContent = job.runStatus ? t('검사 범위 상태: {status}', { status: t(runStatusLabel(job.runStatus)) }) : t('검사 완료와 안전 확인은 다릅니다.');
       const badges = $('execution-tool-status');
+      badges.hidden = Boolean(desktop);
       badges.replaceChildren();
       for (const tool of job.progress?.tools ?? []) badges.append(make('li', 'tag', `${desktop ? desktopToolName(tool.id) : tool.id} · ${(['pending', 'checking', 'scanning'].includes(tool.status) ? t({ pending: '대기 중', checking: '확인 중', scanning: '검사 중' }[tool.status]) : toolStatusLabel(tool.status, getLocale()))}`));
     }
@@ -422,6 +496,7 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
   });
   $('execution-start').addEventListener('click', async () => {
     if ($('execution-start').disabled) return;
+    const restoreFocus = desktop && document.activeElement === $('execution-start');
     const toolIds = [...selection.toolIds];
     const aiConsent = Boolean(desktop && usesAI() && $('desktop-ai-consent').checked);
     const phpUrl = desktop ? phpURL() : '';
@@ -430,9 +505,13 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     pending = true; message = '검사를 시작하는 중…'; draw();
     try {
       const value = desktop ? await nativeRequest('startScan', [{ toolIds, aiConsent, ...(phpUrl ? { phpUrl } : {}) }], (value) => validJob(value?.job)) : await request('/jobs', { targetId: selection.targetId, toolIds });
-      job = value.job; message = '';
+      job = value.job; displayJob = true; message = '';
     } catch (error) { message = errorMessage(error, '검사를 시작하지 못했습니다. 다시 시도하세요.'); }
     finally { pending = false; draw(); schedulePoll(); }
+    if (restoreFocus) {
+      const next = active(job) ? $('execution-cancel') : $('execution-start');
+      if (!next.disabled) next.focus();
+    }
     await openDesktopResult();
   });
   $('execution-cancel').addEventListener('click', async () => {
@@ -447,20 +526,52 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     await openDesktopResult();
   });
   async function openDesktopResult() {
-    if (!desktop || !terminal(job) || !job.reportsReady || job.id === autoRefreshJobId || $('execution-refresh').disabled) return;
+    if (!desktop || !displayJob || !terminal(job) || !job.reportsReady || job.id === autoRefreshJobId || $('execution-refresh').disabled) return;
     autoRefreshJobId = job.id;
     await refreshResults();
+  }
+  async function readResultCatalog() {
+    return desktop
+      ? nativeRequest('refreshResults', [], (value) => validResponse('/catalog/refresh', value))
+      : request('/catalog/refresh', {});
+  }
+  function updateResultGeneration(result) {
+    generation = result.generation;
+    lastRefresh = result.catalog.snapshot.createdAt;
+  }
+  async function loadHistory() {
+    if (!desktop) return { ok: false, message: '이전 결과를 불러오지 못했습니다. 다시 시도하세요.' };
+    await initialDesktopLoad;
+    if (active(job)) return { ok: false, message: '검사가 끝난 뒤 이전 결과를 다시 불러오세요.' };
+    if (pending) return { ok: false, message: '진행 중인 작업이 끝난 뒤 이전 결과를 다시 불러오세요.' };
+    pending = true;
+    draw();
+    try {
+      const result = await readResultCatalog();
+      if (result.generation <= generation) throw new Error('stale_generation');
+      updateResultGeneration(result);
+      await applyCatalog(result.catalog, null, generation);
+      onModeChange({ enabled, desktop: true, lastRefresh, generation });
+      return { ok: true };
+    } catch (error) {
+      const message = ['job_busy', 'execution_busy'].includes(error.message)
+        ? '진행 중인 작업이 끝난 뒤 이전 결과를 다시 불러오세요.'
+        : '이전 결과를 불러오지 못했습니다. 다시 시도하세요.';
+      return { ok: false, message };
+    } finally { pending = false; draw(); }
   }
   async function refreshResults() {
     if ($('execution-refresh').disabled) return;
     pending = true; message = '검사 결과를 목록에 반영하는 중…'; draw();
     try {
-      const result = desktop ? await nativeRequest('refreshResults', [], (value) => validResponse('/catalog/refresh', value)) : await request('/catalog/refresh', {});
+      const result = await readResultCatalog();
       const mapping = executionResultMapping(result, job.id, generation);
       if (!mapping.accepted) throw new Error('stale_generation');
-      generation = result.generation;
-      lastRefresh = result.catalog.snapshot.createdAt;
-      await applyCatalog(result.catalog, mapping.artifactId, generation);
+      updateResultGeneration(result);
+      if (desktop) {
+        const resultKind = result.results.find((entry) => entry.jobId === job.id)?.projectKind ?? job.projectKind ?? projectKind;
+        await applyCatalog(result.catalog, mapping.artifactId, generation, resultKind);
+      } else await applyCatalog(result.catalog, mapping.artifactId, generation);
       if (desktop && mapping.artifactId) openedJobId = job.id;
       message = mapping.artifactId ? (desktop ? '' : '새 스냅샷에 결과를 반영했습니다.') : '검사 결과가 현재 스냅샷에 없습니다. 목록 수집 한도를 확인하세요.';
       onModeChange({ enabled, desktop: Boolean(desktop), lastRefresh, generation });
@@ -490,34 +601,48 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
   async function loadDesktopState(method) {
     revision++; window.clearTimeout(timer);
     pending = true;
-    message = method === 'chooseFolder' ? '폴더 선택을 기다리는 중…'
+    message = method === 'chooseDemo' ? '예제 검사를 준비하는 중…'
+      : method === 'chooseFolder' ? '폴더 선택을 기다리는 중…'
       : method === 'chooseConfig' ? '도구 설정 파일 선택을 기다리는 중…'
         : method === 'chooseNode' ? 'Node.js 실행 파일 선택을 기다리는 중…'
           : '도구 준비 상태를 확인하는 중…';
     draw();
     try {
       const value = await nativeRequest(method, [], validDesktopState);
-      const newFolder = method === 'chooseFolder' || value.folderLabel !== folderLabel;
+      const selectedSource = (method === 'chooseFolder' || method === 'chooseDemo') && value.folderLabel && !value.selectionCancelled;
+      const newKind = value.projectKind ?? (value.folderLabel ? 'folder' : null);
+      const newFolder = selectedSource || value.folderLabel !== folderLabel || newKind !== projectKind;
       const defaultOSV = newFolder || !readyTool(readiness.find((tool) => tool.id === 'osv') ?? {});
       if (newFolder) {
+        displayJob = false;
+        $('desktop-advanced').open = false;
         selection.toolIds = [];
         $('desktop-php-url').value = '';
         $('desktop-ai-consent').checked = false;
       }
       folderLabel = value.folderLabel;
+      projectKind = newKind;
+      projectGuidance = value.projectGuidance ?? null;
       configLabel = value.configLabel ?? null;
       nodeConfigured = value.nodeConfigured === true;
       readiness = value.tools;
-      const toolIds = readiness.filter((tool) => readyTool(tool) && ((defaultOSV && tool.id === 'osv') || selection.toolIds.includes(tool.id))).map((tool) => tool.id);
+      const toolIds = readiness.filter((tool) => readyTool(tool) && (projectKind !== 'demo' || tool.id === 'osv') && ((defaultOSV && tool.id === 'osv') || selection.toolIds.includes(tool.id))).map((tool) => tool.id);
       if (method !== 'getState' || toolIds.length !== selection.toolIds.length) $('desktop-ai-consent').checked = false;
       selection = { targetId: folderLabel ? 'native-selection' : '', toolIds };
       job = value.job;
+      if (active(job)) { displayJob = true; step = 'review'; }
+      else if (selectedSource) step = 'review';
       generation = value.generation;
       enabled = true;
       message = '';
       onModeChange({ enabled, desktop: true, lastRefresh, generation });
+      if (selectedSource) {
+        draw();
+        $('desktop-review-title').focus();
+      }
     } catch (error) {
-      const fallback = method === 'chooseFolder' ? '폴더를 선택하지 못했습니다. 다시 시도하세요.'
+      const fallback = method === 'chooseDemo' ? desktopErrors.demo_unavailable
+        : method === 'chooseFolder' ? '폴더를 선택하지 못했습니다. 다시 시도하세요.'
         : method === 'chooseConfig' ? desktopErrors.config_unavailable
           : method === 'chooseNode' ? desktopErrors.node_unavailable
             : '도구 준비 상태를 확인하지 못했습니다. 다시 시도하세요.';
@@ -526,7 +651,17 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
     await openDesktopResult();
   }
   if (desktop) {
+    onModeChange({ enabled, desktop: true, lastRefresh, generation });
     $('desktop-scan').hidden = false;
+    $('desktop-own-route').addEventListener('click', () => showStep('folder'));
+    $('desktop-guide-back').addEventListener('click', () => showStep('welcome'));
+    $('desktop-review-back').addEventListener('click', () => showStep('welcome'));
+    $('desktop-example-route').addEventListener('click', () => {
+      if (!$('desktop-example-route').disabled) return loadDesktopState('chooseDemo');
+    });
+    $('desktop-guide-choose').addEventListener('click', () => {
+      if (!$('desktop-guide-choose').disabled) return loadDesktopState('chooseFolder');
+    });
     $('desktop-execution').append($('execution-panel'));
     $('execution-panel').open = true;
     for (const id of ['execution-summary', 'execution-scope', 'execution-target-label', 'execution-toolset']) $(id).hidden = true;
@@ -539,18 +674,30 @@ export function initializeExecutionView({ document, window, getLocale, applyCata
       if (typeof desktop.chooseNode === 'function' && !$('desktop-choose-node').disabled) return loadDesktopState('chooseNode');
     });
     $('desktop-select-all').addEventListener('click', () => {
-      if ($('desktop-select-all').disabled) return;
+      if ($('desktop-select-all').disabled || projectKind === 'demo') return;
       $('desktop-optional').open = true;
       chooseTools(readiness.filter(readyTool).map((tool) => tool.id));
     });
     $('desktop-choose-folder').addEventListener('click', () => {
       if (!$('desktop-choose-folder').disabled) return loadDesktopState('chooseFolder');
     });
-    $('desktop-recheck').addEventListener('click', () => {
-      if (!$('desktop-recheck').disabled) return loadDesktopState('getState');
+    for (const id of ['desktop-recheck', 'desktop-advanced-recheck']) $(id).addEventListener('click', () => {
+      if (!$(id).disabled) return loadDesktopState('getState');
     });
-    void loadDesktopState('getState');
+    initialDesktopLoad = loadDesktopState('getState');
   } else void discover();
   window.addEventListener('pagehide', () => window.clearTimeout(timer));
-  return { render: draw };
+  return {
+    render: draw,
+    loadHistory,
+    showStart: ({ folderGuide = false } = {}) => {
+      if (!desktop) return;
+      if (active(job) || pending) {
+        $(desktopSteps[step][1]).focus();
+        return;
+      }
+      displayJob = false;
+      showStep(folderGuide ? 'folder' : 'welcome');
+    },
+  };
 }

@@ -27,7 +27,13 @@ const field = (label, value, className = '', isPath = false) => {
 const jsonText = (value) => {
   try { return JSON.stringify(value, null, 2); } catch { return t('표시할 수 없는 자료'); }
 };
-const labelFor = (artifact) => artifact.kind === 'run' ? t('검사 실행') : artifact.kind === 'comparison' ? t('저장된 비교') : t('자료 오류');
+const starterExampleId = 'SYNTHETIC-EXAMPLE-NOT-A-NEW-SCAN';
+const starterExample = (artifact) => artifact.summary?.runId === starterExampleId;
+const explicitExample = () => window.location.hash === '#saved-example';
+const nativeSavedView = () => explicitExample() || window.location.hash === '#saved-results';
+const labelFor = (artifact) => executionMode.desktop && starterExample(artifact) ? t('저장된 예제 보고서')
+  : artifact.summary?.projectKind === 'demo' ? t('예제 검사 결과')
+  : artifact.kind === 'run' ? t('검사 실행') : artifact.kind === 'comparison' ? t('저장된 비교') : t('자료 오류');
 const statusFor = (artifact) => artifact.state === 'error' ? t('자료 오류') : artifact.summary?.status === 'partial' ? t('부분 완료') : artifact.summary?.status === 'failed' ? t('실패') : artifact.summary?.status === 'completed' ? t('실행 완료') : artifact.summary?.status === 'incomplete' ? t('불완전') : t('준비됨');
 
 let locale = 'ko';
@@ -43,6 +49,7 @@ let catalogGeneration = 0;
 let catalogRequest = 0;
 let executionView;
 let executionMode = { enabled: false, expired: false, lastRefresh: null };
+let historyLoading = false;
 let selectedId = null;
 let detailController;
 let compareController;
@@ -84,8 +91,12 @@ function focusResults() {
   heading.focus({ preventScroll: true });
   heading.scrollIntoView({ block: 'start', behavior: 'instant' });
 }
+function visibleArtifacts() {
+  const items = catalog?.artifacts ?? [];
+  return executionMode.desktop && !explicitExample() ? items.filter((item) => !starterExample(item)) : items;
+}
 function readyRuns() {
-  return (catalog?.artifacts ?? []).filter((item) => item.state === 'ready' && item.kind === 'run');
+  return visibleArtifacts().filter((item) => item.state === 'ready' && item.kind === 'run');
 }
 function setOptions(select, runs, selected = '') {
   while (select.options.length > 1) select.remove(1);
@@ -115,7 +126,7 @@ function refreshRunOptions() {
 }
 function updateToolOptions() {
   const tools = new Set();
-  for (const item of catalog?.artifacts ?? []) {
+  for (const item of visibleArtifacts()) {
     for (const tool of item.summary?.tools ?? []) if (tool?.id) tools.add(tool.id);
   }
   const select = $('tool-filter');
@@ -130,7 +141,7 @@ function updateToolOptions() {
   if (tools.has(selected)) select.value = selected;
 }
 function updateCounts(visible) {
-  const items = catalog?.artifacts ?? [];
+  const items = visibleArtifacts();
   const runs = items.filter((x) => x.kind === 'run' && x.state === 'ready').length;
   const comparisons = items.filter((x) => x.kind === 'comparison' && x.state === 'ready').length;
   const invalid = items.filter((x) => x.state === 'error').length;
@@ -140,15 +151,16 @@ function drawCatalog() {
   const list = $('artifact-list');
   list.replaceChildren();
   if (!catalog) return;
-  const filtered = filterArtifacts(catalog.artifacts, {
+  const items = visibleArtifacts();
+  const filtered = filterArtifacts(items, {
     query: $('catalog-search').value,
     kind: $('kind-filter').value,
     status: $('status-filter').value,
     tool: $('tool-filter').value,
   });
   updateCounts(filtered.length);
-  const total = catalog.artifacts.length;
-  const errorCount = catalog.artifacts.filter((x) => x.state === 'error').length;
+  const total = items.length;
+  const errorCount = items.filter((x) => x.state === 'error').length;
   if (catalog.snapshot.truncated || catalog.snapshot.notices?.length) {
     $('truncation').hidden = false;
     $('truncation').textContent = catalog.snapshot.notices?.map((x) => t(x.message)).filter(Boolean).join(' ') || t('자료 수집 한도에 도달했습니다. 표시되지 않은 자료가 있을 수 있습니다.');
@@ -156,7 +168,7 @@ function drawCatalog() {
     $('truncation').hidden = true;
     $('truncation').textContent = '';
   }
-  if (total === 0) setCatalogState('저장된 자료가 없습니다. 지정된 시작 디렉터리에 run.json 또는 comparison.json을 확인하세요.');
+  if (total === 0) setCatalogState(executionMode.desktop ? '아직 이전 검사 결과가 없습니다.' : '저장된 자료가 없습니다. 지정된 시작 디렉터리에 run.json 또는 comparison.json을 확인하세요.');
   else if (filtered.length === 0) setCatalogState('현재 검색 및 필터에 맞는 자료가 없습니다.');
   else setCatalogState('', false);
   for (const artifact of filtered) {
@@ -202,7 +214,51 @@ function updateSnapshotChrome() {
     chromeMessage('snapshot-state', executionMode.lastRefresh || executionMode.generation > 0 ? '마지막 결과 반영 · {v0}' : '마지막 결과 반영 없음 · 시작 스냅샷 {v0}', { v0: executionMode.lastRefresh ?? catalog.snapshot.createdAt });
   } else chromeMessage('snapshot-state', '시작 스냅샷 · {v0} · 새 파일은 서버 재시작 후 반영', { v0: catalog.snapshot.createdAt });
 }
+function showDesktopScan(options) {
+  document.body.dataset.desktopView = 'scan';
+  desk().dataset.reading = 'list';
+  executionView.showStart(options);
+}
+function showDesktopResults({ fresh = false } = {}) {
+  document.body.dataset.desktopView = 'results';
+  document.body.dataset.desktopResults = fresh ? 'fresh' : 'history';
+  desk().dataset.reading = 'list';
+}
+function showDesktopHistory() {
+  showDesktopResults();
+  $('catalog-disclosure').open = true;
+  $('catalog-toggle').focus();
+}
+async function loadDesktopHistory({ focus = false } = {}) {
+  if (focus) showDesktopHistory();
+  // Native File actions already selected and loaded their own report source.
+  if (nativeSavedView()) return loadCatalog();
+  if (historyLoading) return;
+  historyLoading = true;
+  $('reload').disabled = true;
+  $('desktop-results-history').disabled = true;
+  setCatalogState('이전 결과를 불러오는 중…');
+  chromeMessage('live-status', '이전 결과를 불러오는 중…');
+  try {
+    const result = await executionView.loadHistory();
+    if (!result.ok) {
+      setCatalogState(result.message);
+      chromeMessage('live-status', result.message);
+    } else {
+      chromeMessage('live-status', '저장된 자료 {v0}개를 불러왔습니다.', { v0: visibleArtifacts().length });
+    }
+  } finally {
+    historyLoading = false;
+    $('reload').disabled = false;
+    $('desktop-results-history').disabled = false;
+  }
+}
 function updateExecutionMode(mode) {
+  if (mode.desktop && !executionMode.desktop) {
+    if (nativeSavedView()) showDesktopResults();
+    else document.body.dataset.desktopView = 'scan';
+    $('desktop-results-nav').hidden = false;
+  }
   executionMode = mode;
   $('execution-seal').dataset.i18n = mode.desktop ? '데스크톱 검사' : mode.enabled ? '로컬 실행 가능' : '읽기 전용';
   $('refresh-note').dataset.i18n = mode.desktop ? '검사 보고서가 준비되면 자동으로 엽니다.' : mode.enabled ? '검사 후 결과 반영을 누르면 새 파일을 읽습니다.' : '새 파일을 반영하려면 서버를 다시 시작하세요.';
@@ -210,7 +266,7 @@ function updateExecutionMode(mode) {
   for (const id of ['execution-seal', 'refresh-note', 'snapshot-note']) $(id).textContent = t($(id).dataset.i18n);
   updateSnapshotChrome();
 }
-async function applyExecutionCatalog(value, artifactId) {
+async function applyExecutionCatalog(value, artifactId, _generation, projectKind) {
   catalogController?.abort();
   detailController?.abort();
   compareController?.abort();
@@ -230,7 +286,8 @@ async function applyExecutionCatalog(value, artifactId) {
   drawCatalog();
   updateSnapshotChrome();
   if (artifactId && catalog.artifacts.some((item) => item.id === artifactId)) {
-    await selectArtifact(artifactId);
+    if (executionMode.desktop) showDesktopResults({ fresh: true });
+    await selectArtifact(artifactId, { projectKind });
     if (executionMode.desktop && selectedId === artifactId) focusResults();
   }
 }
@@ -243,16 +300,16 @@ async function loadCatalog() {
   chromeMessage('live-status', '저장된 자료 목록을 불러오는 중입니다.');
   try {
     const value = await apiJson('/api/catalog', catalogController.signal);
-    if (request !== catalogRequest || generation !== catalogGeneration) return;
+    if (request !== catalogRequest || generation !== catalogGeneration || historyLoading) return;
     if (catalog && catalog.snapshot.createdAt !== value.snapshot.createdAt) await applyExecutionCatalog(value, null);
     else catalog = value;
     updateSnapshotChrome();
     updateToolOptions();
     drawCatalog();
-    chromeMessage('live-status', '저장된 자료 {v0}개를 불러왔습니다.', { v0: value.artifacts.length });
+    chromeMessage('live-status', '저장된 자료 {v0}개를 불러왔습니다.', { v0: visibleArtifacts().length });
     if (selectedId && !catalog.artifacts.some((item) => item.id === selectedId)) clearDetail('선택한 자료가 스냅샷에 없습니다.');
   } catch (error) {
-    if (error.name === 'AbortError' || request !== catalogRequest || generation !== catalogGeneration) return;
+    if (error.name === 'AbortError' || request !== catalogRequest || generation !== catalogGeneration || historyLoading) return;
     catalog = undefined;
     chromeMessage('snapshot-state', '스냅샷을 불러오지 못함');
     chromeMessage('catalog-counts', '목록을 불러오지 못했습니다.');
@@ -628,6 +685,22 @@ function drawFindings(parent, run) {
 }
 function drawRun(parent, run, artifact) {
   const top = el('div');
+  const demo = run.projectKind === 'demo';
+  const savedExample = executionMode.desktop && run.id === starterExampleId;
+  if (demo || savedExample) {
+    const banner = el('section', 'scan-result-example');
+    banner.append(
+      el('h3', '', t(demo ? '예제 검사 결과' : '저장된 예제 보고서')),
+      el('p', '', t(demo ? '앱과 함께 제공된 예제 코드에서 발견한 문제입니다.' : '이 보고서는 설명용으로 만든 예제입니다. 새 검사를 실행한 결과가 아닙니다.')),
+    );
+    if (executionMode.desktop) {
+      const next = el('button', 'quiet-button', t('이제 내가 만든 앱 검사'));
+      next.type = 'button';
+      next.addEventListener('click', () => showDesktopScan({ folderGuide: true }));
+      banner.append(next);
+    }
+    top.append(banner);
+  }
   const overview = el('div', 'run-overview');
   const runSummary = el('div', 'run-summary');
   const heading = el('div', 'section-heading');
@@ -654,6 +727,13 @@ function drawRun(parent, run, artifact) {
   }
   if (counts.size) overview.append(severitySummary);
   top.append(overview);
+  if (executionMode.desktop) {
+    const nextStep = run.status === 'failed'
+      ? '검사를 완료하지 못했습니다. 검사 세부 정보를 확인한 뒤 연결과 폴더를 점검하고 다시 실행하세요.'
+      : findings.length ? '발견 항목을 열면 영향을 받는 패키지나 코드와 해결 방법을 볼 수 있습니다.'
+        : run.status === 'completed' ? '검사한 범위에서 발견한 문제가 없습니다. 패키지가 업데이트되면 다시 검사하세요.' : '';
+    if (nextStep) top.append(el('p', 'scan-result-advice', t(nextStep)));
+  }
   if (executionMode.desktop && selectedTools.length) {
     const coverage = el('ul', 'run-tool-coverage');
     coverage.setAttribute('aria-label', t('도구 실행 범위'));
@@ -799,7 +879,7 @@ function drawComparisonSummary(parent, comparison) {
   parent.append(section);
   drawComparison(section, comparison, t('저장된 비교 · 원본 검사 재검증 안 함'));
 }
-async function selectArtifact(id) {
+async function selectArtifact(id, { projectKind } = {}) {
   detailController?.abort();
   detailController = new AbortController();
   const request = ++detailRequest;
@@ -825,11 +905,11 @@ async function selectArtifact(id) {
     const artifact = value.artifact;
     selectedArtifact = artifact;
     if (artifact.kind === 'run' && value.run) {
-      activeRun = value.run;
+      activeRun = projectKind === 'demo' ? { ...value.run, projectKind } : value.run;
       desk().dataset.artifact = 'run';
       $('catalog-disclosure').open = false;
       chromeMessage('workspace-title', '보안 받은편지함');
-      drawRun(parent, value.run, artifact);
+      drawRun(parent, activeRun, artifact);
       if (allFindings.length && window.matchMedia('(min-width: 1121px)').matches) {
         findingView = transitionFindingView(allFindings, findingView, { selectedIndex: 0 });
         drawFindingRows();
@@ -936,7 +1016,10 @@ $('evidence-back').addEventListener('click', () => {
   window.scrollTo({ top: listScroll, behavior: 'instant' });
 });
 
-$('reload').addEventListener('click', loadCatalog);
+$('reload').addEventListener('click', () => {
+  if (executionMode.desktop && document.body.dataset.desktopResults === 'history') return loadDesktopHistory();
+  return loadCatalog();
+});
 $('catalog-filters').addEventListener('submit', (event) => event.preventDefault());
 for (const id of ['catalog-search', 'kind-filter', 'status-filter', 'tool-filter']) $(id).addEventListener(id === 'catalog-search' ? 'input' : 'change', drawCatalog);
 $('catalog-reset').addEventListener('click', () => {
@@ -949,7 +1032,25 @@ $('compare-button').addEventListener('click', compareSelected);
 for (const id of ['baseline-select', 'current-select']) $(id).addEventListener('change', updateComparisonControls);
 chromeMessage('detail-state', '목록에서 저장된 검사 또는 비교를 선택하세요.');
 chromeMessage('workspace-title', '검사 기록');
+$('desktop-new-scan').addEventListener('click', () => showDesktopScan());
+for (const id of ['desktop-saved-results', 'desktop-results-history']) $(id).addEventListener('click', () => loadDesktopHistory({ focus: true }));
+async function loadNativeSavedView() {
+  await loadCatalog();
+  if (executionMode.desktop && explicitExample()) {
+    const example = visibleArtifacts().find(starterExample);
+    if (example) {
+      await selectArtifact(example.id);
+      if (selectedId === example.id && $('detail-state').hidden) focusResults();
+    }
+  }
+}
+window.addEventListener('hashchange', () => {
+  if (executionMode.desktop && nativeSavedView()) {
+    showDesktopHistory();
+    void loadNativeSavedView();
+  }
+});
 executionView = initializeExecutionView({ document, window, getLocale: () => locale, applyCatalog: applyExecutionCatalog, onModeChange: updateExecutionMode });
 applyLanguage();
 drawEvidence();
-loadCatalog();
+void loadNativeSavedView();

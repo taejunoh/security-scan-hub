@@ -21,7 +21,7 @@ export function createViewerController({ sampleRuns, startDashboard, inspectDash
     owned.delete(server);
   };
 
-  function change(runs, example) {
+  function change(runs, example, savedExample = false) {
     if (closing) return Promise.resolve(false);
     return enqueue(async () => {
       if (closing) return false;
@@ -38,16 +38,18 @@ export function createViewerController({ sampleRuns, startDashboard, inspectDash
         const catalog = await inspectDashboard(server.url);
         if (!Number.isSafeInteger(catalog.readyCount) || catalog.readyCount < 1) throw Error('empty catalog');
         if (closing) { await release(server); return false; }
-        const candidate = { url: server.url, example, server };
+        const candidate = { url: server.url, example, savedExample, server };
         showing = true;
-        await show({ url: candidate.url, example });
+        await show({ url: candidate.url, example, ...(savedExample ? { savedExample } : {}) });
         if (closing) { await release(server); return false; }
         current = candidate;
         if (previous) await release(previous.server);
         return true;
       } catch {
         if (server && server !== current?.server) await release(server);
-        if (showing && previous && !closing) await show({ url: previous.url, example: previous.example });
+        if (showing && previous && !closing) await show({
+          url: previous.url, example: previous.example, ...(previous.savedExample ? { savedExample: true } : {}),
+        });
         if (!closing) await notify(INVALID_RESULTS);
         return false;
       } finally {
@@ -63,7 +65,7 @@ export function createViewerController({ sampleRuns, startDashboard, inspectDash
       if (!server?.refreshDesktopCatalog || closing) throw new Error('results unavailable');
       return server.refreshDesktopCatalog(jobs, generation, () => !closing && current?.server === server && isCurrent());
     },
-    showExample: () => change(sampleRuns, true),
+    showExample: ({ saved = false } = {}) => change(sampleRuns, true, saved),
     showFolder: (runs) => change(runs, false),
     close() {
       if (closePromise) return closePromise;

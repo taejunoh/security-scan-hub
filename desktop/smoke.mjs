@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { validatePaths } from './build.mjs';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const requiredChecks = ['rendererLoad', 'catalog', 'securityPreferences', 'folderSwitch', 'singleInstance', 'closedPort', 'executionUnavailable', 'nativeScan'];
+const requiredChecks = ['rendererLoad', 'catalog', 'securityPreferences', 'folderSwitch', 'singleInstance', 'closedPort', 'executionUnavailable', 'nativeScan', 'firstUse', 'demoScan'];
 function ownedURL(value) {
   const url = new URL(value);
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.username || url.password) throw new Error('Smoke server must have an owned loopback URL');
@@ -41,7 +41,7 @@ async function terminate(child) {
     try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
   }
 }
-export async function smoke({ executable, out, timeoutMs = 120000 }) {
+export async function smoke({ executable, out, timeoutMs = 180_000 }) {
   if (!path.isAbsolute(executable ?? '') || !path.isAbsolute(out ?? '')) throw new Error('--executable and --out must be absolute paths');
   await validatePaths({ repository, out, cache: out });
   await mkdir(out, { recursive: true });

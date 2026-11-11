@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { basename, isAbsolute } from 'node:path';
+import { opendir } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
+import { safeRead } from '../agents/validation.mjs';
+import { atomicWriteFile } from '../safe-io.mjs';
 import { directoryIdentity } from './execution-config.mjs';
 import { createJobController, ExecutionError } from './jobs.mjs';
 import { redactValue } from '../redaction.mjs';
+import { inspectProjectGuidance } from './desktop-project-guidance.mjs';
 import { containsPath, desktopToolIds, readDesktopConfig, validateDesktopNodePath, verifyDesktopNode } from './desktop-tooling.mjs';
 
 const active = (job) => job && ['running', 'cancelling'].includes(job.state);
@@ -11,6 +15,22 @@ const problem = (code) => ({ error: { code } });
 const failure = (error) => problem(error instanceof ExecutionError ? error.code : 'internal_error');
 const labelFor = (path, fallback) => redactValue(basename(path).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 120)) || fallback;
 const configuredTools = new Set(desktopToolIds);
+const demoFilename = 'package-lock.json';
+const demoMaxBytes = 64 * 1024;
+const overlaps = (a, b) => containsPath(a, b) || containsPath(b, a);
+
+async function verifyDemoProject(identity, expected) {
+  const current = await directoryIdentity(identity.path);
+  if (current.path !== identity.path || current.dev !== identity.dev || current.ino !== identity.ino) return false;
+  const directory = await opendir(identity.path, { bufferSize: 2 });
+  try {
+    const entry = await directory.read();
+    if (!entry?.isFile() || entry.name !== demoFilename || await directory.read()) return false;
+    return (await safeRead(join(identity.path, demoFilename), demoMaxBytes)).equals(expected);
+  } finally {
+    await directory.close();
+  }
+}
 
 function phpEndpoint(value) {
   if (typeof value !== 'string' || value.length > 2048 || !/^https?:\/\//i.test(value) || /[\x00-\x20\x7f\\?#]/.test(value)) return null;
@@ -22,9 +42,10 @@ function phpEndpoint(value) {
 
 /** Main-process entry point. Executable paths and configuration never come from HTTP or IPC arguments. */
 export async function createDesktopScanController({
-  runs, pickFolder, pickConfig, pickNode, inspectTools, confirmAI, openExternal, refreshCatalog, scan, report,
+  runs, pickFolder, pickConfig, pickNode, inspectTools, loadDemo, getBundledOSV, confirmAI, openExternal, refreshCatalog, scan, report,
 }) {
   const rootIdentity = await directoryIdentity(runs, true);
+  const demoRoot = join(dirname(rootIdentity.path), 'demo-projects');
   const configuration = {
     runsRoot: rootIdentity.path,
     rootIdentity,
@@ -34,6 +55,8 @@ export async function createDesktopScanController({
   const jobs = createJobController({ configuration, scan, report, inspectGit: false, allowAnthropic: true });
   const shutdown = new AbortController();
   let selected = null;
+  let demo = null;
+  let demoBytes;
   let selectedConfig = null;
   let selectedNode = null;
   let jobId = null;
@@ -42,19 +65,28 @@ export async function createDesktopScanController({
   const getJob = () => jobId ? jobs.get(jobId) : null;
   const canUse = (current) => !shutdown.signal.aborted && current();
 
-  const toolOptions = () => inspectTools({
+  const folderTools = () => inspectTools({
     config: selectedConfig?.config, configPath: selectedConfig?.path, nodePath: selectedNode,
     targetPath: selected?.path, runsRoot: rootIdentity.path,
   });
-  const excluded = () => [selected?.path, rootIdentity.path].filter(Boolean);
+  const bundledTool = (command) => ({ id: 'osv', ai: false, command, installation: command ? 'installed' : 'missing' });
+  const toolOptions = async () => selected?.projectKind === 'demo'
+    ? [bundledTool(await getBundledOSV())]
+    : folderTools();
+  const excluded = () => [selected?.path, rootIdentity.path, demoRoot].filter(Boolean);
 
-  async function state() {
-    const tools = (await toolOptions()).map(({ id, command, installation, ai, setup, unavailableReason }) => ({
+  async function state(options) {
+    const tools = (options ?? await toolOptions()).map(({ id, command, installation, ai, setup, unavailableReason }) => ({
       id, installation, authentication: ai ? 'unknown' : 'not_required', selectable: Boolean(command), ai,
       ...(setup ? { setupActions: Object.keys(setup) } : {}),
       ...(unavailableReason ? { unavailableReason } : {}),
     }));
-    return { folderLabel: selected?.label ?? null, configLabel: selectedConfig?.label ?? null, nodeConfigured: Boolean(selectedNode), tools, job: getJob(), generation };
+    return {
+      folderLabel: selected?.label ?? null,
+      projectKind: selected?.projectKind ?? null,
+      projectGuidance: selected?.guidance ?? null,
+      configLabel: selectedConfig?.label ?? null, nodeConfigured: Boolean(selectedNode), tools, job: getJob(), generation,
+    };
   }
 
   async function withNativeOperation(operation) {
@@ -67,19 +99,51 @@ export async function createDesktopScanController({
   }
 
   return {
-    getState: state,
+    getState: () => state(),
     chooseFolder(current = allowed) {
       return withNativeOperation(async () => {
         const chosen = await pickFolder();
         if (!canUse(current)) return problem('forbidden');
-        if (!chosen) return state();
+        if (!chosen) return { ...await state(), selectionCancelled: true };
         let identity;
         try { identity = await directoryIdentity(chosen); }
         catch { return problem('target_unavailable'); }
         if (!canUse(current)) return problem('forbidden');
-        if (containsPath(identity.path, rootIdentity.path) || containsPath(rootIdentity.path, identity.path)) return problem('target_unavailable');
-        selected = { id: randomUUID(), label: labelFor(identity.path, 'Selected folder'), path: identity.path, identity };
+        if (overlaps(identity.path, rootIdentity.path) || overlaps(identity.path, demoRoot)) return problem('target_unavailable');
+        const guidance = await inspectProjectGuidance(identity.path);
+        if (!canUse(current)) return problem('forbidden');
+        selected = { id: randomUUID(), label: labelFor(identity.path, 'Selected folder'), path: identity.path, identity, projectKind: 'folder', guidance };
         return state();
+      });
+    },
+    chooseDemo(current = allowed) {
+      return withNativeOperation(async () => {
+        if (!canUse(current)) return problem('forbidden');
+        if (overlaps(demoRoot, rootIdentity.path)) return problem('demo_unavailable');
+        try {
+          const command = await getBundledOSV?.();
+          if (!command || !isAbsolute(command) || !loadDemo) return problem('demo_unavailable');
+          if (!canUse(current)) return problem('forbidden');
+          if (!demo || !await verifyDemoProject(demo.identity, demoBytes).catch(() => false)) {
+            const fixture = await loadDemo();
+            if (!fixture || typeof fixture !== 'object' || Array.isArray(fixture)) return problem('demo_unavailable');
+            const bytes = Buffer.from(JSON.stringify(fixture, null, 2) + '\n');
+            if (bytes.length > demoMaxBytes) return problem('demo_unavailable');
+            if (!canUse(current)) return problem('forbidden');
+            const identity = await directoryIdentity(join(demoRoot, randomUUID()), true);
+            await atomicWriteFile(join(identity.path, demoFilename), bytes);
+            demoBytes = bytes;
+            demo = {
+              id: randomUUID(), label: 'Example project', path: identity.path, identity,
+              projectKind: 'demo', guidance: { status: 'recognized', examples: [demoFilename] },
+            };
+          }
+          if (!canUse(current)) return problem('forbidden');
+          selected = demo;
+          return state([bundledTool(command)]);
+        } catch {
+          return problem('demo_unavailable');
+        }
       });
     },
     chooseConfig(current = allowed) {
@@ -117,6 +181,9 @@ export async function createDesktopScanController({
           || request.toolIds.some(id => !configuredTools.has(id))
           || new Set(request.toolIds).size !== request.toolIds.length || typeof request.aiConsent !== 'boolean') return problem('invalid_request');
         if (!selected) return problem('target_not_found');
+        const example = selected.projectKind === 'demo';
+        if (example && (request.toolIds.length !== 1 || request.toolIds[0] !== 'osv'
+          || request.aiConsent || Object.hasOwn(request, 'phpUrl'))) return problem('invalid_request');
         let url;
         if (request.toolIds.includes('php2shell')) {
           if (!Object.hasOwn(request, 'phpUrl') || request.phpUrl === '') return problem('php_url_required');
@@ -125,7 +192,8 @@ export async function createDesktopScanController({
         } else if (Object.hasOwn(request, 'phpUrl')) return problem('invalid_request');
         const available = await toolOptions();
         const tools = request.toolIds.map((id) => available.find((entry) => entry.id === id));
-        if (tools.some((tool) => !tool?.command || !isAbsolute(tool.command))) return problem('tool_unavailable');
+        if (tools.some((tool) => !tool?.command || !isAbsolute(tool.command))) return problem(example ? 'demo_unavailable' : 'tool_unavailable');
+        if (example && !await verifyDemoProject(selected.identity, demoBytes).catch(() => false)) return problem('demo_unavailable');
         const ai = tools.some((tool) => tool.ai);
         if (!canUse(current)) return problem('forbidden');
         if (ai && (!request.aiConsent || !await confirmAI({ folderLabel: selected.label, toolIds: tools.filter((tool) => tool.ai).map((tool) => tool.id), signal: shutdown.signal }))) return problem('ai_consent_required');

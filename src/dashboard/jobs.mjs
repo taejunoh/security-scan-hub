@@ -31,6 +31,7 @@ export function createJobController({configuration,scan=runScan,report=writeRepo
       try{await recheckExecutionPaths(configuration,target);}catch{failure='execution_path_changed';throw new Error('Execution paths unavailable');}
       if(job.controller.signal.aborted)throw new Error('Aborted before scan');
       const run=await scan({target:target.path,out:join(configuration.runsRoot,view.id),tools:[...view.toolIds],config:target.config,ai:target.ai,url:target.url,timeoutMs:target.timeoutMs,signal:job.controller.signal,...(inspectGit===undefined?{}:{inspectGit}),
+        ...(target.projectKind==='demo'?{projectKind:'demo'}:{}),
         ...(target.nodeExecutable?{nodeExecutable:target.nodeExecutable}:{}),
         onCleanupUnconfirmed(){job.cleanupUnconfirmed=true;quarantined=true;abort(job,'cleanup_unconfirmed');},
         onProgress(event){
@@ -65,6 +66,7 @@ export function createJobController({configuration,scan=runScan,report=writeRepo
       if(request.toolIds.some(id=>typeof id!=='string'||!target.toolIds.includes(id)||(id==='anthropic'&&!allowAnthropic)))throw new ExecutionError('invalid_request');
       if(jobs.length>=configuration.limits.maxJobs)throw new ExecutionError('job_limit');
       const startedAt=now(),job={controller:new AbortController(),cleanupUnconfirmed:false,public:{id:randomUUID(),targetId:target.id,targetLabel:target.label,toolIds:[...request.toolIds],state:'running',phase:'preparing',startedAt,updatedAt:startedAt,completedAt:null,progress:{completedCount:0,totalCount:request.toolIds.length,tools:request.toolIds.map(id=>({id,status:'pending'}))},runStatus:null,reportsReady:false,resultRunId:null,errorCode:null,abortReason:null}};
+      if(target.projectKind)job.public.projectKind=target.projectKind;
       active=job;jobs.push(job);
       job.promise=Promise.resolve().then(()=>execute(job,target)).finally(()=>{if(active===job)active=null;});
       return publicJob(job);

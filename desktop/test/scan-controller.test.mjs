@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { access, chmod, copyFile, mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +60,134 @@ test('the native picker is the only source of a target, and state contains no ex
   assert.equal(result.job.targetLabel, 'chosen');
   await host.close();
   assert.equal(scans.length, 0, 'shutdown cancels work before the guarded scan starts');
+});
+
+test('folder guidance is bounded, uses only manifest names, and is advisory', async (t) => {
+  const { host, target, root, scans, setChoice } = await fixture(t);
+  const nested = join(target, 'private-workspace-name');
+  const elsewhere = join(root, 'elsewhere');
+  await mkdir(nested);
+  await mkdir(elsewhere);
+  await writeFile(join(nested, 'package-lock.json'), 'file contents are never inspected for guidance');
+  await writeFile(join(elsewhere, 'Cargo.lock'), 'this must not be discovered through a link');
+  await symlink(elsewhere, join(target, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+  const state = await host.chooseFolder();
+  assert.equal(state.projectKind, 'folder');
+  assert.deepEqual(state.projectGuidance, { status: 'recognized', examples: ['package-lock.json'] });
+  assert.ok(!JSON.stringify(state).includes('private-workspace-name'));
+  setChoice(undefined);
+  assert.deepEqual(await host.chooseFolder(), { ...state, selectionCancelled: true });
+  setChoice(target);
+  await rm(nested, { recursive: true });
+  assert.deepEqual((await host.chooseFolder()).projectGuidance, { status: 'not-detected', examples: [] });
+  const deep = join(target, 'a', 'b', 'c', 'd', 'e');
+  await mkdir(deep, { recursive: true });
+  await writeFile(join(deep, 'requirements.txt'), '');
+  assert.deepEqual((await host.chooseFolder()).projectGuidance, { status: 'limited', examples: [] });
+  const { job } = await host.startScan({ toolIds: ['osv'], aiConsent: false });
+  assert.equal(job.projectKind, 'folder');
+  assert.equal(job.targetLabel, 'chosen');
+  await host.close();
+  assert.equal(scans.length, 0);
+});
+
+test('the staged example runs only the bundled scanner and retains its kind across report reloads', async (t) => {
+  const example = new URL('../app/demo/package-lock.json', import.meta.url);
+  let scanner;
+  let inspectScan;
+  let server;
+  let prompts = 0;
+  const reported = new Promise((resolve) => { inspectScan = resolve; });
+  const { host, root, runs, target } = await fixture(t, {
+    loadDemo: async () => JSON.parse(await readFile(example, 'utf8')),
+    getBundledOSV: async () => scanner,
+    confirmAI: async () => { prompts++; return true; },
+    scan: runScan,
+    async report(run, directory) {
+      const { writeReports } = await import('../../src/reports.mjs');
+      await writeReports(run, directory);
+      inspectScan(run);
+    },
+    refreshCatalog: (...args) => server.refreshDesktopCatalog(...args),
+  });
+  const node = await fixtureNode(root);
+  scanner = node;
+  assert.equal((await host.getState()).projectKind, null);
+  assert.deepEqual(await host.chooseDemo(() => false), { error: { code: 'forbidden' } });
+  assert.equal((await host.getState()).folderLabel, null);
+  await host.chooseFolder();
+  const state = await host.chooseDemo();
+  assert.equal(state.projectKind, 'demo');
+  assert.deepEqual(state.projectGuidance, { status: 'recognized', examples: ['package-lock.json'] });
+  assert.deepEqual(state.tools.filter(tool => tool.selectable).map(tool => tool.id), ['osv']);
+  assert.ok(!JSON.stringify(state).includes(root));
+  for (const request of [
+    { toolIds: ['open-code-review'], aiConsent: true },
+    { toolIds: ['osv', 'open-code-review'], aiConsent: false },
+    { toolIds: ['osv'], aiConsent: true },
+  ]) {
+    assert.deepEqual(await host.startScan(request), { error: { code: 'invalid_request' } });
+  }
+  assert.equal(prompts, 0);
+  // Node is a local executable fixture. It cannot complete an OSV scan, which
+  // also checks that failure provenance is preserved for a real attempted run.
+  const { job } = await host.startScan({ toolIds: ['osv'], aiConsent: false });
+  assert.equal(job.projectKind, 'demo');
+  const run = await Promise.race([reported, new Promise((_, reject) => {
+    const timer = setTimeout(() => reject(Error('No demo report produced')), 10_000);
+    timer.unref();
+  })]);
+  assert.equal(run.projectKind, 'demo');
+  assert.deepEqual(run.tools.filter(tool => tool.selected).map(tool => tool.id), ['osv']);
+  assert.notEqual(run.target.path, target);
+  assert.ok(!run.target.path.startsWith(runs));
+  assert.equal((await lstat(run.target.path)).isDirectory(), true);
+  if (process.platform !== 'win32') assert.equal((await lstat(run.target.path)).mode & 0o077, 0);
+  const source = JSON.parse(await readFile(join(run.target.path, 'package-lock.json'), 'utf8'));
+  assert.equal(source.packages['node_modules/lodash'].version, '4.17.20');
+  while ((await host.getJob()).job.state === 'running') await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await host.chooseFolder()).projectKind, 'folder');
+  assert.equal((await host.getJob()).job.projectKind, 'demo');
+  server = await startDashboard({ runs: samplePath, desktopCatalog: { runs, token } });
+  t.after(() => server.close());
+  const updated = await host.refreshResults();
+  assert.deepEqual(updated.results.map(({ jobId, projectKind }) => ({ jobId, projectKind })), [{ jobId: job.id, projectKind: 'demo' }]);
+  assert.equal(updated.catalog.artifacts[0].summary.projectKind, 'demo');
+  const headers = { 'x-sec-hub-desktop': token };
+  const detail = await fetch(new URL(`api/artifacts/${updated.results[0].artifactId}`, server.url), { headers });
+  assert.equal((await detail.json()).run.projectKind, 'demo');
+  const saved = await startDashboard({ runs });
+  t.after(() => saved.close());
+  const catalog = await (await fetch(new URL('api/catalog', saved.url))).json();
+  assert.equal(catalog.artifacts[0].summary.projectKind, 'demo');
+});
+
+test('example selection cannot use an OSV executable from a user configuration', async (t) => {
+  const { host } = await fixture(t);
+  await host.chooseFolder();
+  assert.deepEqual(await host.chooseDemo(), { error: { code: 'demo_unavailable' } });
+  assert.equal((await host.getState()).projectKind, 'folder');
+});
+
+test('a modified example source cannot be scanned and selection restages the trusted fixture', async (t) => {
+  const { host, root, scans, setChoice } = await fixture(t, {
+    loadDemo: async () => JSON.parse(await readFile(new URL('../app/demo/package-lock.json', import.meta.url), 'utf8')),
+    getBundledOSV: async () => process.execPath,
+  });
+  await host.chooseDemo();
+  const staging = join(root, 'demo-projects');
+  const [first] = await readdir(staging);
+  const source = join(staging, first);
+  setChoice(source);
+  assert.deepEqual(await host.chooseFolder(), { error: { code: 'target_unavailable' } });
+  await writeFile(join(source, 'package-lock.json'), '{}');
+  assert.deepEqual(await host.startScan({ toolIds: ['osv'], aiConsent: false }), { error: { code: 'demo_unavailable' } });
+  assert.equal(scans.length, 0);
+  assert.equal((await host.chooseDemo()).projectKind, 'demo');
+  const [second] = (await readdir(staging)).filter(entry => entry !== first);
+  assert.ok(second, 'retry stages a fresh source directory');
+  const contents = JSON.parse(await readFile(join(staging, second, 'package-lock.json'), 'utf8'));
+  assert.equal(contents.packages['node_modules/lodash'].version, '4.17.20');
 });
 
 test('the host rechecks directory identity before executing and rejects overlapping run locations', async (t) => {
@@ -342,6 +470,15 @@ test('IPC sender validation rejects foreign contents, sessions, origins and subf
   assert.equal(isTrustedSender({ ...valid, sender: { ...contents } }, contents, session, activeUrl), false);
   assert.equal(isTrustedSender(valid, contents, {}, activeUrl), false);
   assert.equal(isTrustedSender({ ...valid, senderFrame: { url: activeUrl } }, contents, session, activeUrl), false);
+  frame.url = `${activeUrl}#saved-results`;
+  assert.equal(isTrustedSender(valid, contents, session, activeUrl), true);
+  assert.equal(isTrustedSender({ ...valid, senderFrame: { url: frame.url } }, contents, session, activeUrl), false);
+  frame.url = `${activeUrl}#saved-example`;
+  assert.equal(isTrustedSender(valid, contents, session, activeUrl), true);
+  for (const value of [`${activeUrl}#other`, `${activeUrl}some-path#saved-results`, `${activeUrl}?unexpected#saved-results`]) {
+    frame.url = value;
+    assert.equal(isTrustedSender(valid, contents, session, activeUrl), false);
+  }
   frame.url = 'http://127.0.0.1:31415/';
   assert.equal(isTrustedSender(valid, contents, session, activeUrl), false);
 });

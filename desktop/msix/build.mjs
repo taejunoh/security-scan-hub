@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { deflateSync } from 'node:zlib';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const logoNames = new Map([[44, 'Square44x44Logo.png'], [50, 'StoreLogo.png'], [150, 'Square150x150Logo.png']]);
+const logoNames = ['Square44x44Logo.png', 'StoreLogo.png', 'Square150x150Logo.png'];
 const xml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 
 export function validateIdentity({ name, publisher, publisherDisplayName, displayName }) {
@@ -34,61 +33,6 @@ export function validateVersion(version) {
   return version;
 }
 
-function pngChunk(type, data) {
-  const typeBytes = Buffer.from(type);
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const crcInput = Buffer.concat([typeBytes, data]);
-  let crc = 0xffffffff;
-  for (const byte of crcInput) {
-    crc ^= byte;
-    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-  }
-  const crcBytes = Buffer.alloc(4);
-  crcBytes.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
-  return Buffer.concat([length, crcInput, crcBytes]);
-}
-
-export function brandPng(size) {
-  const rows = Buffer.alloc(size * (size * 4 + 1));
-  const polygon = [[size * .5, size * .14], [size * .8, size * .27], [size * .77, size * .6], [size * .68, size * .75], [size * .5, size * .86], [size * .32, size * .75], [size * .23, size * .6], [size * .2, size * .27]];
-  const edge = (x, y, x1, y1, x2, y2, width) => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
-    return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) <= width;
-  };
-  for (let y = 0; y < size; y++) {
-    const row = y * (size * 4 + 1);
-    rows[row] = 0;
-    for (let x = 0; x < size; x++) {
-      const pointX = x + .5;
-      const pointY = y + .5;
-      let inside = false;
-      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const [xi, yi] = polygon[i];
-        const [xj, yj] = polygon[j];
-        if (((yi > pointY) !== (yj > pointY)) && pointX < ((xj - xi) * (pointY - yi)) / (yj - yi) + xi) inside = !inside;
-      }
-      let color = [18, 35, 48, 255];
-      if (inside) color = [35, 111, 112, 255];
-      if (polygon.some(([px, py], i) => edge(pointX, pointY, px, py, ...polygon[(i + 1) % polygon.length], Math.max(1, size * .035)))) color = [191, 231, 222, 255];
-      const check = [[size * .36, size * .5], [size * .46, size * .6], [size * .65, size * .4]];
-      if (edge(pointX, pointY, ...check[0], ...check[1], Math.max(1, size * .045)) || edge(pointX, pointY, ...check[1], ...check[2], Math.max(1, size * .045))) color = [255, 255, 255, 255];
-      rows.set(color, row + 1 + x * 4);
-    }
-  }
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(size, 0);
-  header.writeUInt32BE(size, 4);
-  header[8] = 8;
-  header[9] = 6;
-  header[10] = 0;
-  header[11] = 0;
-  header[12] = 0;
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0))]);
-}
-
 export function appxManifest(identity, version) {
   const display = xml(identity.displayName);
   const publisherDisplayName = xml(identity.publisherDisplayName);
@@ -109,7 +53,7 @@ export function appxManifest(identity, version) {
   <Resources><Resource Language="en-US" /></Resources>
   <Applications>
     <Application Id="App" Executable="Sec Hub.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="${display}" Description="${display} local security scanner" BackgroundColor="#122330" Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png" AppListEntry="default" />
+      <uap:VisualElements DisplayName="${display}" Description="${display} local security scanner" BackgroundColor="#233844" Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png" AppListEntry="default" />
     </Application>
   </Applications>
   <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>
@@ -196,7 +140,7 @@ export async function buildMsix({ source, out, identityName, publisher, publishe
   try {
     await cp(actualSource, payload, { recursive: true, errorOnExist: true, force: false, dereference: false });
     await mkdir(assets);
-    for (const [size, name] of logoNames) await writeFile(path.join(assets, name), brandPng(size));
+    for (const name of logoNames) await copyFile(path.join(repository, 'desktop', 'branding', name), path.join(assets, name));
     await writeFile(path.join(payload, 'AppxManifest.xml'), appxManifest(identity, version), 'utf8');
     const stagedInventory = await sourceInventory(payload);
     const stagedSource = stagedInventory.filter(file => !file.path.startsWith('Assets/') && file.path !== 'AppxManifest.xml');

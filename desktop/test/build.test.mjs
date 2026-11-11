@@ -41,10 +41,10 @@ test('packaging requires absolute output and cache paths outside the real source
 test('staging includes only app entrypoints, synthetic JSON and the explicit core payload', async t => {
   assert.equal(typeof build.stagePayload, 'function', 'allowlisted staging is required');
   const dir = await fixture(t); const repo = path.join(dir, 'repo'); const resources = path.join(dir, 'resources');
-  for (const name of ['desktop/app/main.cjs', 'desktop/app/controller.mjs', 'desktop/app/policy.mjs', 'desktop/app/smoke.mjs', 'desktop/app/package.json', 'desktop/app/sample/run.json', 'src/dashboard/server.mjs', 'package.json']) await file(repo, name, name.endsWith('package.json') ? '{"version":"0.1.0"}' : name);
-  for (const name of ['desktop/app/test/private.json', 'desktop/app/sample/secret.txt', 'desktop/app/dev-scratch.mjs', 'verification/private.json', 'results/private.json', '.env', 'bin/sec-hub.mjs', 'examples/private.json']) await file(repo, name, 'PRIVATE');
+  for (const name of ['desktop/app/main.cjs', 'desktop/app/controller.mjs', 'desktop/app/policy.mjs', 'desktop/app/smoke.mjs', 'desktop/app/package.json', 'desktop/app/sample/run.json', 'desktop/app/demo/package-lock.json', 'src/dashboard/server.mjs', 'package.json']) await file(repo, name, name.endsWith('package.json') ? '{"version":"0.1.0"}' : name);
+  for (const name of ['desktop/app/test/private.json', 'desktop/app/sample/secret.txt', 'desktop/app/demo/private.json', 'desktop/app/dev-scratch.mjs', 'verification/private.json', 'results/private.json', '.env', 'bin/sec-hub.mjs', 'examples/private.json']) await file(repo, name, 'PRIVATE');
   const payload = await build.stagePayload({ repository: repo, resources });
-  assert.deepEqual(payload.files.map(f => f.path).sort(), ['app/controller.mjs', 'app/main.cjs', 'app/package.json', 'app/policy.mjs', 'app/sample/run.json', 'app/smoke.mjs', 'core/package.json', 'core/src/dashboard/server.mjs']);
+  assert.deepEqual(payload.files.map(f => f.path).sort(), ['app/controller.mjs', 'app/demo/package-lock.json', 'app/main.cjs', 'app/package.json', 'app/policy.mjs', 'app/sample/run.json', 'app/smoke.mjs', 'core/package.json', 'core/src/dashboard/server.mjs']);
   assert.equal(await readFile(path.join(resources, 'core/src/dashboard/server.mjs'), 'utf8'), 'src/dashboard/server.mjs');
   assert.deepEqual((await readdir(resources)).sort(), ['app', 'core']);
 });
@@ -82,7 +82,7 @@ test('macOS runtime validation rejects a Mach-O built for the other architecture
 test('platform layout returns the actual named executable and resources directory', () => {
   assert.equal(typeof build.platformLayout, 'function', 'native platform layout is required');
   const base = path.resolve('/package');
-  for (const target of ['darwin-arm64', 'darwin-x64']) assert.deepEqual(build.platformLayout(base, target), { application: path.join(base, 'Sec Hub.app'), executable: path.join(base, 'Sec Hub.app/Contents/MacOS/SecHub'), resources: path.join(base, 'Sec Hub.app/Contents/Resources') });
+  for (const target of ['darwin-arm64', 'darwin-x64']) assert.deepEqual(build.platformLayout(base, target), { application: path.join(base, 'Security Scan Hub.app'), executable: path.join(base, 'Security Scan Hub.app/Contents/MacOS/SecHub'), resources: path.join(base, 'Security Scan Hub.app/Contents/Resources') });
   assert.deepEqual(build.platformLayout(base, 'win32-x64'), { application: path.join(base, 'Sec Hub'), executable: path.join(base, 'Sec Hub/Sec Hub.exe'), resources: path.join(base, 'Sec Hub/resources') });
   assert.throws(() => build.platformLayout(base, 'linux-x64'), /unsupported/i);
 });
@@ -90,9 +90,10 @@ test('platform layout returns the actual named executable and resources director
 const smoke = await import('../smoke.mjs').catch(() => ({}));
 test('packaged smoke rejects missing renderer evidence and mismatched embedded runtime', () => {
   assert.equal(typeof smoke.validateSummary, 'function', 'runtime smoke validation is required');
-  const summary = { status: 'passed', runtime: { electron: '45.1.0', node: '24.22.1', platform: 'darwin', arch: 'arm64' }, checks: { rendererLoad: true, catalog: true, securityPreferences: true, folderSwitch: true, singleInstance: true, closedPort: true, executionUnavailable: true, nativeScan: true }, urls: ['http://127.0.0.1:12345/', 'http://127.0.0.1:12346/'], secondary: { exitCode: 0, signal: null } };
+  const summary = { status: 'passed', runtime: { electron: '45.1.0', node: '24.22.1', platform: 'darwin', arch: 'arm64' }, checks: { rendererLoad: true, catalog: true, securityPreferences: true, folderSwitch: true, singleInstance: true, closedPort: true, executionUnavailable: true, nativeScan: true, firstUse: true, demoScan: true }, urls: ['http://127.0.0.1:12345/', 'http://127.0.0.1:12346/'], secondary: { exitCode: 0, signal: null } };
   assert.doesNotThrow(() => smoke.validateSummary(summary, { electron: '45.1.0', node: '24.22.1' }, 'darwin-arm64'));
   assert.throws(() => smoke.validateSummary({ ...summary, checks: { ...summary.checks, rendererLoad: false } }, { electron: '45.1.0', node: '24.22.1' }, 'darwin-arm64'), /rendererLoad/);
+  assert.throws(() => smoke.validateSummary({ ...summary, checks: { ...summary.checks, demoScan: false } }, { electron: '45.1.0', node: '24.22.1' }, 'darwin-arm64'), /demoScan/);
   assert.throws(() => smoke.validateSummary({ ...summary, runtime: { ...summary.runtime, node: '22.0.0' } }, { electron: '45.1.0', node: '24.22.1' }, 'darwin-arm64'), /runtime/i);
   assert.throws(() => smoke.validateSummary({ ...summary, urls: ['https://example.com/', 'http://127.0.0.1:12346/'] }, { electron: '45.1.0', node: '24.22.1' }, 'darwin-arm64'), /loopback/i);
 });
@@ -108,17 +109,30 @@ test('external smoke port probe fails while an owned server still listens', asyn
   await assert.doesNotReject(smoke.assertClosedPort(url));
 });
 
-test('macOS helper rebranding supplies the executable key absent from official helper plists', { skip: process.platform !== 'darwin' }, async t => {
-  const dir = await fixture(t); const app = path.join(dir, 'Sec Hub.app');
+test('macOS helper paths match the app bundle name and declare the renamed executable', { skip: process.platform !== 'darwin' }, async t => {
+  const dir = await fixture(t); const app = path.join(dir, 'Security Scan Hub.app');
   const plist = keys => `<?xml version="1.0"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>${Object.entries(keys).map(([k,v]) => `<key>${k}</key><string>${v}</string>`).join('')}</dict></plist>`;
-  await file(app, 'Contents/Info.plist', plist({ CFBundleExecutable: 'Electron', CFBundleIdentifier: 'com.github.Electron', CFBundleName: 'Electron', CFBundleDisplayName: 'Electron', CFBundleShortVersionString: '45.1.0', CFBundleVersion: '45.1.0', ElectronAsarIntegrity: 'removed' }));
+  await file(app, 'Contents/Info.plist', plist({ CFBundleExecutable: 'Electron', CFBundleIdentifier: 'com.github.Electron', CFBundleName: 'Electron', CFBundleDisplayName: 'Electron', CFBundleShortVersionString: '45.1.0', CFBundleVersion: '45.1.0', CFBundleIconFile: 'defaultElectron.icns', ElectronAsarIntegrity: 'removed' }));
   await file(app, 'Contents/MacOS/Electron');
+  await file(app, 'Contents/Resources/defaultElectron.icns');
   await file(app, 'Contents/Frameworks/Electron Helper.app/Contents/Info.plist', plist({ CFBundleIdentifier: 'com.github.Electron.helper', CFBundleName: 'Electron Helper' }));
   await file(app, 'Contents/Frameworks/Electron Helper.app/Contents/MacOS/Electron Helper');
   await build.rebrandMac(app, '0.1.0');
-  await assert.doesNotReject(readFile(path.join(app, 'Contents/Frameworks/Sec Hub Helper.app/Contents/MacOS/Sec Hub Helper')));
   const { execFileSync } = await import('node:child_process');
-  assert.equal(execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', path.join(app, 'Contents/Frameworks/Sec Hub Helper.app/Contents/Info.plist')], { encoding: 'utf8' }).trim(), 'Sec Hub Helper');
+  const plistValue = key => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+  assert.equal(plistValue('CFBundleName'), 'Security Scan Hub');
+  assert.equal(plistValue('CFBundleDisplayName'), 'Security Scan Hub');
+  assert.equal(plistValue('CFBundleIdentifier'), 'org.sechub.desktop');
+  const icon = await readFile(path.join(app, 'Contents/Resources', plistValue('CFBundleIconFile')));
+  assert.equal(icon.toString('ascii', 0, 4), 'icns');
+  assert.equal(icon.readUInt32BE(4), icon.length);
+  assert.deepEqual(await readdir(path.join(app, 'Contents/Resources')), ['SecurityScanHub.icns']);
+  const helper = `${plistValue('CFBundleName')} Helper`;
+  const helperContents = path.join(app, 'Contents', 'Frameworks', `${helper}.app`, 'Contents');
+  await assert.doesNotReject(readFile(path.join(helperContents, 'MacOS', helper)));
+  const helperPlistValue = key => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(helperContents, 'Info.plist')], { encoding: 'utf8' }).trim();
+  assert.equal(helperPlistValue('CFBundleExecutable'), helper);
+  assert.equal(helperPlistValue('CFBundleIdentifier'), 'org.sechub.desktop.helper');
 });
 
 test('staging rejects an app directory symlink before following its entrypoints', { skip: process.platform === 'win32' }, async t => {
@@ -149,7 +163,7 @@ test('smoke refuses a nonempty evidence directory before validating or launching
 async function signedMacFixture(t) {
   const { execFileSync } = await import('node:child_process');
   const { copyFile, chmod } = await import('node:fs/promises');
-  const dir = await fixture(t); const application = path.join(dir, 'Sec Hub.app');
+  const dir = await fixture(t); const application = path.join(dir, 'Security Scan Hub.app');
   await file(application, 'Contents/Info.plist', '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Fixture</string><key>CFBundleIdentifier</key><string>org.sechub.archive-fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
   await mkdir(path.join(application, 'Contents/MacOS'), { recursive: true });
   await copyFile('/usr/bin/true', path.join(application, 'Contents/MacOS/Fixture')); await chmod(path.join(application, 'Contents/MacOS/Fixture'), 0o755);

@@ -105,7 +105,7 @@ jobs:
             --publisher 'CN=Security Scan Hub CI' `
             --publisher-display-name 'Security Scan Hub CI' `
             --display-name 'Security Scan Hub CI' `
-            --version '1.2.5.0'
+            --version '1.2.6.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Sign temporarily, install, register in Start and verify scan and report
         shell: powershell
@@ -149,7 +149,7 @@ jobs:
             --publisher $env:STORE_PUBLISHER `
             --publisher-display-name $env:STORE_PUBLISHER_DISPLAY_NAME `
             --display-name $env:STORE_DISPLAY_NAME `
-            --version '1.2.5.0'
+            --version '1.2.6.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $testMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/ci-test/msix-identity.json" -Raw | ConvertFrom-Json
           $storeMetadata = Get-Content "$env:RUNNER_TEMP/sec-hub-msix-build/store-candidate/msix-identity.json" -Raw | ConvertFrom-Json

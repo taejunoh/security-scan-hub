@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <title>Security Scan Hub</title>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="#233844"/>
+  <path d="M64 27 94 39v20c0 19-12 34-30 43-18-9-30-24-30-43V39Z"
+        fill="#365d71" stroke="#f7f6ee" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="60" cy="60" r="12" fill="none" stroke="#f7f6ee" stroke-width="6"/>
+  <path d="m69 69 11 11" fill="none" stroke="#f7f6ee" stroke-width="6" stroke-linecap="round"/>
+</svg>

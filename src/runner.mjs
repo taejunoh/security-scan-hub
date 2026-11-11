@@ -117,6 +117,7 @@ export async function runScan(options) {
   const redact=createRedactor();
   const sanitize=value=>redactValue(value);
   const run={schemaVersion:1,id:randomUUID(),startedAt:new Date().toISOString(),target,status:'failed',tools:[],findings:[]};
+  if(options.projectKind==='demo')run.projectKind='demo';
   for(const adapter of available){
     const record={id:adapter.id,name:adapter.name,source:adapter.source,selected:selected.has(adapter.id),status:'skipped',findings:[]};run.tools.push(record);
     if(!selected.has(adapter.id)){record.reason='Not selected';continue;}

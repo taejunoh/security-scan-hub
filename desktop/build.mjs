@@ -9,7 +9,11 @@ import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const branding = path.join(repository, 'desktop', 'branding');
+const productName = 'Security Scan Hub';
+const macIcon = 'SecurityScanHub.icns';
 const appFiles = ['package.json', 'main.cjs', 'controller.mjs', 'policy.mjs', 'preload.cjs', 'tools.mjs', 'osv-lock.json', 'smoke.mjs'];
+const demoLockfile = 'demo/package-lock.json';
 const licenseFiles = ['LICENSE', 'LICENSES.chromium.html'];
 const macArchitectures = new Map([['darwin-arm64', 'arm64'], ['darwin-x64', 'x86_64']]);
 const supported = new Set([...macArchitectures.keys(), 'win32-x64']);
@@ -49,7 +53,7 @@ export async function validatePaths({ repository: root, out, cache }) {
 }
 export function platformLayout(base, target) {
   if (!supported.has(target)) throw new Error(`Unsupported desktop target: ${target}`);
-  const application = path.join(base, macArchitectures.has(target) ? 'Sec Hub.app' : 'Sec Hub');
+  const application = path.join(base, macArchitectures.has(target) ? `${productName}.app` : 'Sec Hub');
   return macArchitectures.has(target)
     ? { application, executable: path.join(application, 'Contents/MacOS/SecHub'), resources: path.join(application, 'Contents/Resources') }
     : { application, executable: path.join(application, 'Sec Hub.exe'), resources: path.join(application, 'resources') };
@@ -90,6 +94,16 @@ export async function stagePayload({ repository: root, resources }) {
   }
   try { for (const filename of await sourceTree(path.join(app, 'sample'), { jsonOnly: true })) sources.push([filename, path.join('app', path.relative(app, filename))]); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const demo = await lstat(path.join(app, 'demo')).catch(error => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (demo) {
+    if (demo.isSymbolicLink() || !demo.isDirectory()) throw new Error('Expected regular demo source directory');
+    const filename = path.join(app, demoLockfile);
+    await regularFile(filename);
+    sources.push([filename, path.join('app', demoLockfile)]);
+  }
   await regularFile(path.join(root, 'package.json'));
   sources.push([path.join(root, 'package.json'), path.join('core', 'package.json')]);
   for (const filename of await sourceTree(path.join(root, 'src'))) {
@@ -102,7 +116,7 @@ export async function stagePayload({ repository: root, resources }) {
     await copyFile(source, destination); await chmod(destination, (await stat(source)).mode & 0o777);
     if (await hashFile(source) !== await hashFile(destination)) throw new Error(`Staged payload changed: ${relative}`);
   }
-  return { files: (await inventory(resources)).filter(file => file.path.startsWith('app/') || file.path.startsWith('core/')), allowlist: { app: [...appFiles, 'sample/**/*.json'], core: ['package.json', 'src/**'] } };
+  return { files: (await inventory(resources)).filter(file => file.path.startsWith('app/') || file.path.startsWith('core/')), allowlist: { app: [...appFiles, 'sample/**/*.json', demoLockfile], core: ['package.json', 'src/**'] } };
 }
 export async function validateRuntime(root, target) {
   if (!supported.has(target)) throw new Error(`Unsupported desktop target: ${target}`);
@@ -256,14 +270,19 @@ export async function prepareMacSigning(application) {
 }
 export async function rebrandMac(application, version) {
   const contents = path.join(application, 'Contents'); const plist = path.join(contents, 'Info.plist');
+  const resources = path.join(contents, 'Resources');
+  await copyFile(path.join(branding, macIcon), path.join(resources, macIcon));
+  for (const icon of ['electron.icns', 'defaultElectron.icns']) await rm(path.join(resources, icon), { force: true });
   await rename(path.join(contents, 'MacOS/Electron'), path.join(contents, 'MacOS/SecHub'));
-  for (const [key, value] of Object.entries({ CFBundleExecutable: 'SecHub', CFBundleIdentifier: 'org.sechub.desktop', CFBundleName: 'Sec Hub', CFBundleDisplayName: 'Sec Hub', CFBundleShortVersionString: version, CFBundleVersion: version })) await setPlist(plist, key, value);
+  for (const [key, value] of Object.entries({ CFBundleExecutable: 'SecHub', CFBundleIdentifier: 'org.sechub.desktop', CFBundleName: productName, CFBundleDisplayName: productName, CFBundleIconFile: macIcon, CFBundleShortVersionString: version, CFBundleVersion: version })) await setPlist(plist, key, value);
   // This integrity record describes upstream's removed default_app.asar, not our plain app folder.
   await run('/usr/libexec/PlistBuddy', ['-c', 'Delete :ElectronAsarIntegrity', plist]);
   const frameworks = path.join(contents, 'Frameworks');
   for (const name of await readdir(frameworks)) {
     if (!name.startsWith('Electron Helper') || !name.endsWith('.app')) continue;
-    const oldName = name.slice(0, -4); const newName = oldName.replace('Electron', 'Sec Hub');
+    const oldName = name.slice(0, -4);
+    // Electron resolves the branded helper from the main app's CFBundleName.
+    const newName = oldName.replace('Electron', productName);
     const helper = path.join(frameworks, name); const helperPlist = path.join(helper, 'Contents/Info.plist');
     await rename(path.join(helper, 'Contents/MacOS', oldName), path.join(helper, 'Contents/MacOS', newName));
     await run('/usr/libexec/PlistBuddy', ['-c', `Add :CFBundleExecutable string ${newName}`, helperPlist]); await setPlist(helperPlist, 'CFBundleName', newName);
@@ -313,7 +332,7 @@ async function macSigningPlan(application) {
     if (entry.name.endsWith('.app')) {
       const executable = (await run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', path.join(bundle, 'Contents', 'Info.plist')])).stdout.trim();
       bundleExecutables.add(path.join(bundle, 'Contents', 'MacOS', executable));
-      const jit = ['Sec Hub Helper.app', 'Sec Hub Helper (Renderer).app', 'Sec Hub Helper (GPU).app'].includes(entry.name);
+      const jit = ['', ' (Renderer)', ' (GPU)'].some(suffix => entry.name === `${productName} Helper${suffix}.app`);
       bundles.push({ filename: bundle, jit });
     } else if (entry.name.endsWith('.framework')) {
       const versions = path.join(bundle, 'Versions');
@@ -459,6 +478,7 @@ async function buildPackage({ target, out, cache, allowDirty, macSignIdentity, n
     if (macArchitectures.has(target)) await rebrandMac(layout.application, appVersion);
     else {
       await rename(path.join(layout.application, 'electron.exe'), layout.executable);
+      await copyFile(path.join(branding, 'app-icon.ico'), path.join(layout.resources, 'app-icon.ico'));
       try { await rename(path.join(layout.application, 'electron_wer.dll'), path.join(layout.application, 'Sec Hub_wer.dll')); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
@@ -480,7 +500,7 @@ async function buildPackage({ target, out, cache, allowDirty, macSignIdentity, n
       ? { kind: 'ad-hoc', identity: '-', applePublisherSigned: false, notarized: false, removedBuildMetadata: ['com.apple.FinderInfo'] }
       : { kind: 'no-sec-hub-publisher-signature', publisherSigned: false, vendorRuntimeSignature: 'preserved-if-present' };
     if (developerId) Object.assign(signing, { kind: 'developer-id', identity: developerId.name, teamId: developerId.teamId, applePublisherSigned: true, hardenedRuntime: true, notarized: undefined });
-    const metadata = { schemaVersion: 1, application: 'Sec Hub', appVersion: appMetadata.version, coreVersion: coreMetadata.version, target, label, source, runtime: { electron: lock.electron, node: lock.node, officialArchive: pin }, payload, licenses, bundledTools, windowsSafeIO, signing };
+    const metadata = { schemaVersion: 1, application: productName, appVersion: appMetadata.version, coreVersion: coreMetadata.version, target, label, source, runtime: { electron: lock.electron, node: lock.node, officialArchive: pin }, payload, licenses, bundledTools, windowsSafeIO, signing };
     const bundledScanner = path.join(layout.resources, 'tools', 'osv', bundledTools.osv.binary.filename);
     let signatureLog = '';
     if (developerId) {

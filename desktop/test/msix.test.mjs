@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appxManifest, brandPng, validateIdentity, validateVersion } from '../msix/build.mjs';
+import { readFile } from 'node:fs/promises';
+import { appxManifest, validateIdentity, validateVersion } from '../msix/build.mjs';
 
 test('MSIX identity requires a valid package name and publisher distinguished name', () => {
   assert.deepEqual(validateIdentity({
@@ -41,9 +42,10 @@ test('Store manifest keeps the app title separate from the verified publisher na
   assert.match(manifest, /IgnorableNamespaces="uap desktop rescap"/);
 });
 
-test('generated Store tiles are PNG images at the dimensions named by the package manifest', () => {
-  for (const size of [44, 50, 150]) {
-    const logo = brandPng(size);
+test('Store tiles are PNG images at the dimensions named by the package manifest', async () => {
+  const logos = [[44, 'Square44x44Logo.png'], [50, 'StoreLogo.png'], [150, 'Square150x150Logo.png']];
+  for (const [size, name] of logos) {
+    const logo = await readFile(new URL(`../branding/${name}`, import.meta.url));
     assert.deepEqual(logo.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.equal(logo.readUInt32BE(16), size);
     assert.equal(logo.readUInt32BE(20), size);

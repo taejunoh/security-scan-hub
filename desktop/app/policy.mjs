@@ -22,8 +22,13 @@ export function browserUrl(value, ownedUrl) {
   return isOwnedUrl(value, ownedUrl) ? value : null;
 }
 
+function isDesktopPage(value, ownedUrl) {
+  return isOwnedUrl(value, ownedUrl)
+    && [ownedUrl, `${ownedUrl}#saved-results`, `${ownedUrl}#saved-example`].includes(value);
+}
+
 export function advisoryBrowserUrl(value, source, ownedUrl) {
-  return source === ownedUrl && isOwnedUrl(source, ownedUrl)
+  return isDesktopPage(source, ownedUrl)
     && typeof value === 'string' && /^https:\/\/osv\.dev\/vulnerability\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value)
     ? value : null;
 }
@@ -31,7 +36,7 @@ export function advisoryBrowserUrl(value, source, ownedUrl) {
 export function isTrustedSender(event, contents, session, activeUrl) {
   if (!contents || contents.isDestroyed() || event.sender !== contents || contents.session !== session) return false;
   const frame = event.senderFrame;
-  return Boolean(frame && frame === contents.mainFrame && frame.url === activeUrl && isOwnedUrl(frame.url, activeUrl));
+  return Boolean(frame && frame === contents.mainFrame && isDesktopPage(frame.url, activeUrl));
 }
 
 export function scanResultsPath({ windowsStore, home, userData }) {

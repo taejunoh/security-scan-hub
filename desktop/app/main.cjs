@@ -18,14 +18,13 @@ function smokeDirectory() {
   } catch { return null; }
 }
 const smokeDir = smokeDirectory();
-if (smokeDir) {
-  const profile = path.join(smokeDir, 'profile');
-  fs.mkdirSync(profile, { recursive: true, mode: 0o700 });
-  app.setPath('userData', profile);
-}
-// Keep the original Electron name so existing users retain their saved scan directory.
-app.setName('Sec Hub');
 const productName = 'Security Scan Hub';
+// Resolve the original Electron profile before changing the displayed name.
+app.setName('Sec Hub');
+const profile = smokeDir ? path.join(smokeDir, 'profile') : app.getPath('userData');
+fs.mkdirSync(profile, { recursive: true, mode: 0o700 });
+app.setPath('userData', profile);
+app.setName(productName);
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();
@@ -35,6 +34,7 @@ if (!hasLock) {
   let scanHost;
   let viewEpoch = 0;
   let activeUrl = null;
+  let viewUrl = null;
   let quitPromise;
   let allowQuit = false;
   let secondCount = 0;
@@ -75,17 +75,17 @@ if (!hasLock) {
     if (quitPromise || smokeDir) return;
     const answer = await dialog.showMessageBox(window, {
       type: 'error', title: productName, message: 'The saved results view could not be loaded.',
-      detail: `Reload the results, show the bundled example, or quit and reopen ${productName}.`,
-      buttons: ['Reload results', 'Show example', 'Quit'], defaultId: 0, cancelId: 2,
+      detail: `Reload the results, open the saved example, or quit and reopen ${productName}.`,
+      buttons: ['Reload results', 'Open saved example', 'Quit'], defaultId: 0, cancelId: 2,
     });
     if (answer.response === 0 && controller?.current) {
-      try { activeUrl = controller.current.url; await window.loadURL(activeUrl); }
+      try { activeUrl = controller.current.url; await window.loadURL(viewUrl ?? activeUrl); }
       catch { requestQuit(); }
-    } else if (answer.response === 1) await controller?.showExample();
+    } else if (answer.response === 1) await controller?.showExample({ saved: true });
     else requestQuit();
   }
   async function start() {
-    const [{ createViewerController, createNativeActions }, { advisoryBrowserUrl, isOwnedUrl, isTrustedSender, scanResultsPath }, { inspectDesktopTools }] = await Promise.all([
+    const [{ createViewerController, createNativeActions }, { advisoryBrowserUrl, isOwnedUrl, isTrustedSender, scanResultsPath }, { inspectDesktopTools, verifiedOSV }] = await Promise.all([
       import('./controller.mjs'), import('./policy.mjs'), import('./tools.mjs'),
     ]);
     const core = app.isPackaged ? path.join(process.resourcesPath, 'core') : path.resolve(__dirname, '..', '..');
@@ -105,7 +105,8 @@ if (!hasLock) {
     currentSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => callback({ cancel: !trusted(details.url) }));
     window = new BrowserWindow({
       width: 1440, height: 980, minWidth: 850, minHeight: 600, show: true,
-      title: `${productName} — Example data · No new scan`,
+      title: productName,
+      ...(app.isPackaged && process.platform === 'win32' ? { icon: path.join(process.resourcesPath, 'app-icon.ico') } : {}),
       webPreferences: { session: currentSession, preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, devTools: false },
     });
     window.on('close', (event) => { event.preventDefault(); requestQuit(); });
@@ -153,10 +154,11 @@ if (!hasLock) {
         const catalog = await response.json();
         return { readyCount: catalog.artifacts.filter((item) => item.state === 'ready').length };
       },
-      show: async ({ url, example }) => {
+      show: async ({ url, example, savedExample }) => {
         activeUrl = url; loaded = false;
-        await window.loadURL(url);
-        window.setTitle(example ? `${productName} — Example data · No new scan` : `${productName} — Saved results`);
+        viewUrl = savedExample ? `${url}#saved-example` : example ? url : `${url}#saved-results`;
+        await window.loadURL(viewUrl);
+        window.setTitle(savedExample ? `${productName} — Example data · No new scan` : example ? productName : `${productName} — Saved results`);
       },
       notify: async (message) => {
         if (!smokeDir && !quitPromise) await dialog.showMessageBox(window, { type: 'warning', title: productName, message });
@@ -178,6 +180,8 @@ if (!hasLock) {
       scanHost = await createDesktopScanController({
         runs,
         inspectTools,
+        loadDemo: async () => (await import('./demo/package-lock.json', { with: { type: 'json' } })).default,
+        getBundledOSV: () => verifiedOSV(app.isPackaged ? process.resourcesPath : null),
         async pickFolder() {
           if (smokeDir && smokeSelection) { const selected = smokeSelection; smokeSelection = undefined; return selected; }
           const result = await dialog.showOpenDialog(window, { title: 'Choose a project folder', buttonLabel: 'Choose folder', properties: ['openDirectory'] });
@@ -220,8 +224,8 @@ if (!hasLock) {
       if (smokeDir) console.error('Desktop scan initialization failed:', error);
     }
     const unavailable = { error: { code: 'execution_unavailable' } };
-    const channelArities = { getState: 0, chooseFolder: 0, chooseConfig: 0, chooseNode: 0, startScan: 1, getJob: 0, cancelScan: 0, refreshResults: 0, openSetup: 2 };
-    const focusedActions = new Set(['chooseFolder', 'chooseConfig', 'chooseNode', 'startScan', 'openSetup']);
+    const channelArities = { getState: 0, chooseFolder: 0, chooseDemo: 0, chooseConfig: 0, chooseNode: 0, startScan: 1, getJob: 0, cancelScan: 0, refreshResults: 0, openSetup: 2 };
+    const focusedActions = new Set(['chooseFolder', 'chooseDemo', 'chooseConfig', 'chooseNode', 'startScan', 'openSetup']);
     for (const [method, arity] of Object.entries(channelArities)) {
       ipcMain.handle(`sec-hub:${method}`, async (event, ...args) => {
         const epoch = viewEpoch;
@@ -232,7 +236,7 @@ if (!hasLock) {
           if (!scanHost) {
             if (method !== 'getState') return unavailable;
             const tools = (await inspectTools()).map(({ id, installation, ai }) => ({ id, installation, ai, selectable: false, authentication: ai ? 'unknown' : 'not_required' }));
-            return { folderLabel: null, configLabel: null, nodeConfigured: false, tools, job: null, generation: 0 };
+            return { folderLabel: null, projectKind: null, projectGuidance: null, configLabel: null, nodeConfigured: false, tools, job: null, generation: 0 };
           }
           return await scanHost[method](...args, current);
         } catch { return { error: { code: 'internal_error' } }; }
@@ -259,9 +263,13 @@ if (!hasLock) {
           const result = await scanHost.refreshResults(() => !quitPromise && epoch === viewEpoch);
           if (result.error) {
             await dialog.showMessageBox(window, { type: 'warning', title: productName, message: 'Recent scans are unavailable while a scan is running, or the results could not be loaded.' });
-          } else await window.loadURL(activeUrl);
+          } else {
+            viewUrl = `${activeUrl}#saved-results`;
+            await window.loadURL(viewUrl);
+            contents.reload();
+          }
         }) },
-        { label: 'Show example', click: invoke(() => controller.showExample()) },
+        { label: 'Open saved example', click: invoke(() => controller.showExample({ saved: true })) },
         { label: 'Open saved view in browser', click: invoke(actions.openInBrowser) },
         { type: 'separator' }, { label: 'Quit', accelerator: 'Alt+F4', click: requestQuit },
       ] },

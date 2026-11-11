@@ -74,6 +74,7 @@ function harness(respond, { token = 'b'.repeat(64), locale = 'ko', desktop } = {
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(name, fn) { this.listeners[name] = fn; }
     async emit(name) { await this.listeners[name]?.(); }
+    focus() { this.focused = true; }
   }
   const nodes = new Map();
   const document = { getElementById: id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); }, createElement: tag => new Node(tag) };
@@ -121,6 +122,123 @@ const nativeHarness = (overrides = {}) => {
   const h = harness(() => { throw new Error('desktop scans must not use browser execution'); }, { locale: 'en', desktop });
   return { ...h, calls, node: id => h.nodes.get(id) };
 };
+
+test('first launch offers two routes before exposing folder, history or tool choices', async () => {
+  const h = nativeHarness({
+    chooseDemo: () => desktopState(),
+    chooseFolder: () => desktopState({
+      folderLabel: 'my-app', projectKind: 'folder',
+      projectGuidance: { status: 'recognized', examples: ['package-lock.json'] },
+    }),
+  });
+  await h.settle();
+  assert.equal(h.node('desktop-welcome').hidden, false);
+  assert.equal(h.node('desktop-folder-guide').hidden, true);
+  assert.equal(h.node('desktop-review').hidden, true);
+  await h.node('desktop-own-route').emit('click');
+  assert.equal(h.node('desktop-folder-guide').hidden, false);
+  assert.equal(h.node('desktop-folder-title').focused, true);
+  assert.deepEqual(h.calls, [['getState']]);
+  await h.node('desktop-guide-choose').emit('click');
+  assert.equal(h.node('desktop-review').hidden, false);
+  assert.equal(h.node('desktop-folder').textContent, 'my-app');
+  assert.match(h.node('desktop-project-guidance').textContent, /package-lock\.json/);
+  assert.equal(h.node('execution-start').disabled, false);
+  assert.equal(h.node('desktop-advanced').open ?? false, false);
+});
+
+test('a demo has an explicit scan step, its own label and only runs basic OSV', async () => {
+  const demo = { ...running, projectKind: 'demo' };
+  const h = nativeHarness({
+    chooseDemo: () => desktopState({ folderLabel: 'example-app', projectKind: 'demo' }),
+    startScan: () => ({ job: demo }),
+    getJob: () => ({ job: { ...demo, ...terminal, completedAt: '2026-10-28T00:00:10Z' } }),
+    refreshResults: () => ({ generation: 1, catalog: { artifacts: [], snapshot: { createdAt: 'now' } }, results: [{ jobId: demo.id, runId: 'run-one', artifactId: 'saved', projectKind: 'demo' }] }),
+  });
+  await h.settle();
+  await h.node('desktop-example-route').emit('click');
+  assert.deepEqual(h.calls, [['getState'], ['chooseDemo']]);
+  assert.equal(h.node('desktop-review').hidden, false);
+  assert.match(h.node('desktop-review-title').textContent, /example scan/i);
+  assert.equal(h.node('desktop-advanced').hidden, true);
+  await h.node('execution-start').emit('click');
+  assert.deepEqual(h.calls.at(-1), ['startScan', { toolIds: ['osv'], aiConsent: false }]);
+  await [...h.timers.values()][0].fn();
+  assert.deepEqual(h.applied[0].slice(1), ['saved', 1, 'demo']);
+});
+
+test('folder recovery copy is advisory and changes with locale, while unavailable examples stay on the welcome screen', async () => {
+  const h = nativeHarness({
+    chooseDemo: () => ({ error: { code: 'demo_unavailable' } }),
+    chooseFolder: () => desktopState({
+      folderLabel: 'Downloads', projectKind: 'folder',
+      projectGuidance: { status: 'not-detected', examples: [] },
+    }),
+  });
+  await h.settle();
+  await h.node('desktop-example-route').emit('click');
+  assert.equal(h.node('desktop-welcome').hidden, false);
+  assert.match(h.node('desktop-source-status').textContent, /reopen.*scan your app/i);
+  await h.node('desktop-own-route').emit('click');
+  await h.node('desktop-guide-choose').emit('click');
+  assert.match(h.node('desktop-project-guidance').textContent, /unzip/i);
+  assert.equal(h.node('execution-start').disabled, false);
+  h.setLocale('ko');
+  assert.match(h.node('desktop-project-guidance').textContent, /압축을 풀/);
+});
+
+test('a cancelled folder picker stays on the guide and a limited folder can still be scanned', async () => {
+  let cancelled = true;
+  const previous = { folderLabel: 'old-project', projectKind: 'folder', job: { ...running, ...terminal, completedAt: '2026-10-28T00:00:10Z' } };
+  const h = nativeHarness({
+    getState: () => desktopState(previous),
+    chooseFolder: () => cancelled
+      ? desktopState({ ...previous, selectionCancelled: true })
+      : desktopState({
+        folderLabel: 'large-project', projectKind: 'folder',
+        projectGuidance: { status: 'limited', examples: [] },
+      }),
+  });
+  await h.settle();
+  assert.equal(h.node('desktop-welcome').hidden, false);
+  assert.deepEqual(h.calls, [['getState']]);
+  await h.node('desktop-own-route').emit('click');
+  await h.node('desktop-guide-choose').emit('click');
+  assert.equal(h.node('desktop-folder-guide').hidden, false);
+  assert.equal(h.node('desktop-review').hidden, true);
+  assert.equal(h.calls.some(([method]) => method === 'refreshResults'), false);
+  cancelled = false;
+  await h.node('desktop-guide-choose').emit('click');
+  assert.equal(h.node('desktop-review').hidden, false);
+  assert.match(h.node('desktop-project-guidance').textContent, /only check part.*smaller/i);
+  assert.equal(h.node('execution-start').disabled, false);
+});
+
+test('opening previous results loads persisted artifacts through the native bridge on cold startup', async () => {
+  const saved = { id: 'prior', summary: { runId: 'prior-run' } };
+  const savedCatalog = { artifacts: [saved], snapshot: { createdAt: 'now' } };
+  const h = nativeHarness({ refreshResults: () => ({ catalog: savedCatalog, generation: 1, results: [] }) });
+  await h.settle();
+  assert.deepEqual(h.calls, [['getState']]);
+  assert.deepEqual(h.applied, []);
+  assert.deepEqual(await h.view.loadHistory(), { ok: true });
+  assert.deepEqual(h.calls, [['getState'], ['refreshResults']]);
+  assert.deepEqual(h.applied, [[savedCatalog, null, 1]]);
+  assert.equal(h.modes.at(-1).generation, 1);
+  assert.equal(h.requests.length, 0);
+});
+
+test('history loading handles active jobs and host failures without replacing the current catalog', async () => {
+  const busy = nativeHarness({ getState: () => desktopState({ job: running, folderLabel: 'app' }) });
+  await busy.settle();
+  assert.deepEqual(await busy.view.loadHistory(), { ok: false, message: '검사가 끝난 뒤 이전 결과를 다시 불러오세요.' });
+  assert.deepEqual(busy.calls, [['getState']]);
+
+  const failed = nativeHarness({ refreshResults: () => ({ error: { code: 'refresh_failed' } }) });
+  await failed.settle();
+  assert.deepEqual(await failed.view.loadHistory(), { ok: false, message: '이전 결과를 불러오지 못했습니다. 다시 시도하세요.' });
+  assert.deepEqual(failed.applied, []);
+});
 
 test('desktop uses native folder selection and runs only the default OSV scan without AI consent', async () => {
   const h = nativeHarness();

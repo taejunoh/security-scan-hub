@@ -153,3 +153,18 @@ test('seven integration aggregates preserve native static coverage and general p
   assert.match(html,/Seven verified integrations/);assert.match(html,/official-vuln-scan-static/);assert.match(html,/no Docker\/ASAN harness/);assert.match(html,/not_performed/);assert.doesNotMatch(html,/OCR retry|Original OCR status/);
   assert.deepEqual(sarif.runs[0].properties.toolStates[0].execution,execution);assert.equal(sarif.runs[0].invocations,undefined);
 });
+
+test('example scans remain explicit in standalone HTML and SARIF without relabeling real projects', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sec-hub-demo-report-'));
+  try {
+    const example = { ...run(), projectKind: 'demo' };
+    const outputs = await writeReports(example, directory);
+    assert.match(await readFile(outputs.html, 'utf8'), /Example scan — bundled sample project/);
+    assert.match(await readFile(outputs.html, 'utf8'), /does not describe your own app or computer/);
+    assert.equal(JSON.parse(await readFile(outputs.sarif, 'utf8')).runs[0].properties.projectKind, 'demo');
+    assert.equal(JSON.parse(await readFile(outputs.json, 'utf8')).projectKind, 'demo');
+    await writeReports(run(), directory);
+    assert.doesNotMatch(await readFile(outputs.html, 'utf8'), /Example scan — bundled sample project/);
+    assert.equal(JSON.parse(await readFile(outputs.sarif, 'utf8')).runs[0].properties.projectKind, undefined);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

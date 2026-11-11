@@ -1,5 +1,9 @@
 # Security Scan Hub
 
+**In development:** The 0.2.6 candidate adds a guided first scan, a real example scan,
+and the new Security Scan Hub app name and icon. [Preview the first-scan guide](docs/FIRST-SCAN-PREVIEW.md).
+This is not yet included in the downloads below.
+
 **Run seven security tools in a single scan. Review the results in one place.**
 Security Scan Hub combines dependency checks, AI skill scanning, code review,
 and URL checks in one report. See the findings and which tools completed,

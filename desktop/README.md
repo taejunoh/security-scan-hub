@@ -1,5 +1,9 @@
 # Security Scan Hub desktop
 
+**In development:** The 0.2.6 candidate adds a guided first scan, a real example scan,
+and the new Security Scan Hub app name and icon. [Preview the first-scan guide](../docs/FIRST-SCAN-PREVIEW.md).
+This is not yet included in the downloads below.
+
 Version 0.2.4 remains the published Windows Store version and the available
 Mac release. The Windows 0.2.5 update has been submitted for certification and
 is in pre-processing. It requires a separate manual **Publish now** action

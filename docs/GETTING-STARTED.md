@@ -1,5 +1,9 @@
 # Getting started with Security Scan Hub Desktop
 
+**In development:** The 0.2.6 candidate adds a guided first scan, a real example scan,
+and the new Security Scan Hub app name and icon. [Preview the first-scan guide](FIRST-SCAN-PREVIEW.md).
+This is not yet included in the downloads below.
+
 ## 1. Download and open the app
 
 For Windows, install the published Microsoft Store app. For Mac, download the

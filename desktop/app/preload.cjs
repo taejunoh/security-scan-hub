@@ -9,6 +9,7 @@ if (process.isMainFrame) {
   contextBridge.exposeInMainWorld('secHubDesktop', Object.freeze({
     getState: invoke('getState'),
     chooseFolder: invoke('chooseFolder', true),
+    chooseDemo: invoke('chooseDemo', true),
     chooseConfig: invoke('chooseConfig', true),
     chooseNode: invoke('chooseNode', true),
     startScan: invoke('startScan', true),

@@ -90,9 +90,10 @@ function redactFinding(finding, redact) {
   return safe;
 }
 function redactRun(run, redact) {
-  const { schemaVersion, status, target, tools, findings, ...rest } = run;
+  const { schemaVersion, status, target, tools, findings, projectKind, ...rest } = run;
   const safe = redactFields(rest, ['id', 'startedAt', 'endedAt', 'provenance', 'verification', 'verificationPassed', 'pendingIntegrations'], redact);
   safe.schemaVersion = schemaVersion;
+  if (projectKind === 'demo') safe.projectKind = 'demo';
   safe.status = RUN_STATUSES.has(status) ? status : redact(status);
   if (target !== undefined) safe.target = target ? redactTarget(target, redact) : redact(target);
   if (tools !== undefined) safe.tools = Array.isArray(tools) ? tools.map((tool) => {
@@ -133,7 +134,7 @@ function redactComparison(comparison, redact, generated = false) {
 function redactSummary(summary, kind, redact) {
   if (!summary) return summary;
   if (kind === 'run') {
-    return { runId: redact(summary.runId), status: RUN_STATUSES.has(summary.status) ? summary.status : redact(summary.status), target: { path: redact(summary.target.path), ...(summary.target.revision !== undefined ? { revision: redact(summary.target.revision) } : {}), ...(typeof summary.target.dirty === 'boolean' ? { dirty: summary.target.dirty } : {}) }, startedAt: redact(summary.startedAt), endedAt: redact(summary.endedAt), findingCount: summary.findingCount, tools: summary.tools.map((tool) => ({ id: redact(tool.id), status: TOOL_STATUSES.has(tool.status) ? tool.status : redact(tool.status), ...(tool.selected !== undefined ? { selected: tool.selected } : {}) })) };
+    return { runId: redact(summary.runId), ...(summary.projectKind === 'demo' ? { projectKind: 'demo' } : {}), status: RUN_STATUSES.has(summary.status) ? summary.status : redact(summary.status), target: { path: redact(summary.target.path), ...(summary.target.revision !== undefined ? { revision: redact(summary.target.revision) } : {}), ...(typeof summary.target.dirty === 'boolean' ? { dirty: summary.target.dirty } : {}) }, startedAt: redact(summary.startedAt), endedAt: redact(summary.endedAt), findingCount: summary.findingCount, tools: summary.tools.map((tool) => ({ id: redact(tool.id), status: TOOL_STATUSES.has(tool.status) ? tool.status : redact(tool.status), ...(tool.selected !== undefined ? { selected: tool.selected } : {}) })) };
   }
   return { baselineId: redact(summary.baselineId), currentId: redact(summary.currentId), target: { path: redact(summary.target.path) }, status: summary.status, counts: { ...summary.counts }, gate: { failOn: summary.gate.failOn, exitCode: summary.gate.exitCode } };
 }
@@ -210,7 +211,7 @@ function exactFields(body, fields) {
 function mapResults(snapshot, jobs) {
   return jobs.filter((job) => job.reportsReady && job.resultRunId).map((job) => {
     const artifact = snapshot.catalog.artifacts.find((entry) => entry.kind === 'run' && entry.state === 'ready' && snapshot.records.get(entry.id)?.payload?.id === job.resultRunId);
-    return { jobId: job.id, runId: job.resultRunId, artifactId: artifact?.id ?? null };
+    return { jobId: job.id, runId: job.resultRunId, artifactId: artifact?.id ?? null, ...(job.projectKind ? { projectKind: job.projectKind } : {}) };
   });
 }
 function hasDesktopSession(request, token) {

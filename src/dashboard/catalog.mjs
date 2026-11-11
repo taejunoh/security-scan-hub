@@ -138,6 +138,7 @@ function validateRun(payload, limits, state) {
   state.findings += leaves;
   return {
     runId: payload.id,
+    ...(payload.projectKind === 'demo' ? { projectKind: 'demo' } : {}),
     status: payload.status,
     target: { path: payload.target.path, ...(payload.target.revision !== undefined ? { revision: payload.target.revision } : {}), ...(typeof payload.target.dirty === 'boolean' ? { dirty: payload.target.dirty } : {}) },
     startedAt: payload.startedAt,

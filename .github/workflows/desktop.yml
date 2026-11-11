@@ -51,7 +51,7 @@ jobs:
       - name: Run actual packaged application and observe shutdown
         shell: bash
         run: |
-          node desktop/smoke.mjs --executable "$RUNNER_TEMP/sec-hub-desktop-build/package/Sec Hub.app" --out "$RUNNER_TEMP/sec-hub-desktop-evidence/smoke" 2>&1 | tee "$RUNNER_TEMP/sec-hub-desktop-evidence/smoke.log"
+          node desktop/smoke.mjs --executable "$RUNNER_TEMP/sec-hub-desktop-build/package/Security Scan Hub.app" --out "$RUNNER_TEMP/sec-hub-desktop-evidence/smoke" 2>&1 | tee "$RUNNER_TEMP/sec-hub-desktop-evidence/smoke.log"
       - name: Preserve native package and raw evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -204,7 +204,7 @@ jobs:
           version="$(node -p "require('./desktop/app/package.json').version")"
           archive="$RUNNER_TEMP/intel-release/sec-hub-desktop-$version-darwin-x64-notarized-prerelease.zip"
           /usr/bin/ditto -x -k "$archive" "$RUNNER_TEMP/intel-release/extracted"
-          app="$RUNNER_TEMP/intel-release/extracted/Sec Hub.app"
+          app="$RUNNER_TEMP/intel-release/extracted/Security Scan Hub.app"
           test "$(/usr/bin/lipo -archs "$app/Contents/MacOS/SecHub")" = x86_64
           /usr/bin/codesign --verify --deep --strict "$app"
           /usr/bin/xcrun stapler validate "$app"
