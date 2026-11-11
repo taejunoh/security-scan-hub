@@ -191,8 +191,8 @@ jobs:
           release_commit="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish --jq 'select(.isDraft) | .targetCommitish')"
           [[ "$release_commit" =~ ^[0-9a-f]{40}$ ]]
           git merge-base --is-ancestor "$release_commit" "$GITHUB_SHA"
-          # Allow a workflow-only fix to rerun verification of already notarized bytes.
-          git diff --quiet "$release_commit" "$GITHUB_SHA" -- . ':(exclude).github/workflows/desktop.yml'
+          # Allow desktop CI-only fixes; neither workflow is included in the app payload.
+          git diff --quiet "$release_commit" "$GITHUB_SHA" -- . ':(exclude).github/workflows/desktop.yml' ':(exclude).github/workflows/desktop-msix.yml'
           mkdir -p "$RUNNER_TEMP/intel-release"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$archive" --dir "$RUNNER_TEMP/intel-release"
           cd "$RUNNER_TEMP/intel-release"
