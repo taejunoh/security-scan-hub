@@ -28,11 +28,11 @@ Anthropic workflows are disabled. See [tool setup](desktop/README.md#run-a-multi
 
 ## Install
 
-**Mac** — download the signed and notarized 0.2.9 prerelease for your Mac,
+**Mac** — download the signed and notarized 0.2.10 prerelease for your Mac,
 extract the ZIP, and open **Security Scan Hub.app**:
 
-- [Apple silicon (M-series)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip)
-- [Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
+- [Apple silicon (M-series)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-arm64-notarized-prerelease.zip)
+- [Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
 
 If you use [Homebrew](https://brew.sh/), you can install either Mac version
 from Terminal instead:
@@ -50,7 +50,7 @@ files together. It is unsigned, so Windows may show an unknown publisher warning
 The Store and portable releases are versioned separately.
 
 [Full installation guide](docs/GETTING-STARTED.md) ·
-[Mac release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.9) ·
+[Mac release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.10) ·
 [Windows release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
 
 ## Run your first scan
