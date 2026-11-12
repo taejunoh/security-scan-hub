@@ -1,6 +1,6 @@
 import { desktopToolName, initializeExecutionView } from './execution-view.mjs';
 import { translate } from './i18n.mjs';
-import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, findingSeverity, gateLabel, pageItems, reportedDependencyPackages, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from './view-model.mjs';
+import { categoryLabel, compactPath, comparisonControlState, dependencyGraphView, dependencyMapAvailable, filterArtifacts, filterFindings, findingAction, findingPackage, findingSeverity, gateLabel, layoutDependencyGraph, pageItems, reportedDependencyPackages, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from './view-model.mjs';
 
 const $ = (id) => document.getElementById(id);
 const desk = () => document.querySelector('.desk');
@@ -63,12 +63,25 @@ let activeRun;
 let filteredFindings = [];
 let reportedPackages = [];
 let dependencyPage = 1;
+let dependencyQuery = '';
+let dependencyScope = 'all';
+let selectedDependencyId = null;
+let dependencyListPage = 1;
+let dependencyRelationPage = { incoming: 1, outgoing: 1 };
+let dependencyListOpen = false;
+let dependencyDetailOpen = { incoming: false, outgoing: false, vulnerabilities: false };
+let reportedPackagesOpen = false;
+let dependencyGraphResizeObserver;
 let evidenceOpener;
 const wideResults = () => window.matchMedia('(min-width: 860px)').matches;
 
 const severityKeys = { critical: '치명적', high: '높음', medium: '보통', low: '낮음', info: '정보', unknown: '알 수 없음' };
 const severityName = (severity) => t(severityKeys[severity]);
 const packageLabel = ({ name, version }) => name && (version ? `${name} ${version}` : name);
+const svgLabel = (value, limit = 26) => {
+  const characters = Array.from(String(value ?? ''));
+  return characters.length > limit ? `${characters.slice(0, limit - 1).join('')}…` : characters.join('');
+};
 const toolName = desktopToolName;
 function projectName({ target, projectKind }) {
   if (projectKind === 'demo') return t('예제 프로젝트');
@@ -252,7 +265,7 @@ function showDesktopResults({ fresh = false } = {}) {
   setReading(wideResults() && findingView.selectedIndex !== null ? 'preview' : 'list');
 }
 function showDesktopDependencies() {
-  if (!reportedPackages.length) return;
+  if (!dependencyMapAvailable(activeRun)) return;
   setDesktopView('dependencies');
   drawDesktopDependencies();
   $('desktop-dependencies-title').focus();
@@ -361,6 +374,7 @@ function clearDetail(message = '목록에서 저장된 검사 또는 비교를 �
   selectedId = null;
   activeRun = null;
   selectedArtifact = null;
+  selectedDependencyId = null;
   savedComparison = null;
   allFindings = [];
   updateReportedPackages();
@@ -603,8 +617,8 @@ function updateReportedPackages() {
   if (!executionMode.desktop) return;
   dependencyPage = 1;
   reportedPackages = reportedDependencyPackages(allFindings);
-  $('desktop-nav-dependencies').hidden = !reportedPackages.length;
-  if (!reportedPackages.length && document.body.dataset.desktopView === 'dependencies') showDesktopResults();
+  $('desktop-nav-dependencies').hidden = !dependencyMapAvailable(activeRun);
+  if (!dependencyMapAvailable(activeRun) && document.body.dataset.desktopView === 'dependencies') showDesktopResults();
   if (document.body.dataset.desktopView === 'dependencies') drawDesktopDependencies();
 }
 function openDependencyFinding(index) {
@@ -620,12 +634,258 @@ function openDependencyFinding(index) {
   selectFinding(index);
 }
 function drawDesktopDependencies() {
+  dependencyGraphResizeObserver?.disconnect();
+  dependencyGraphResizeObserver = undefined;
   const parent = $('desktop-dependency-content');
   parent.replaceChildren();
   if (!activeRun) return;
+  const graph = dependencyGraphView(activeRun.dependencyGraph, { query: dependencyQuery, scope: dependencyScope });
+  const graphStatus = el('section', `dependency-graph-panel dependency-overview dependency-state-${graph.status}`);
+  graphStatus.setAttribute('aria-labelledby', 'dependency-status-title');
+  const overviewHead = el('div', 'dependency-overview-head');
+  const statusTitle = el('h3', '', t(graph.status === 'complete' ? 'Dependency graph complete' : graph.status === 'partial' ? 'Dependency graph partial' : 'Dependency graph unavailable'));
+  statusTitle.id = 'dependency-status-title';
+  const graphMeta = el('p', 'dependency-meta', t('Graph count: {v0} packages · {v1} relationships · {v2}', {
+    v0: graph.totalNodes ?? 0, v1: graph.totalEdges ?? 0, v2: projectName(activeRun),
+  }));
+  overviewHead.append(statusTitle, graphMeta);
+  graphStatus.append(overviewHead);
+  if (!activeRun.dependencyGraph) graphStatus.append(el('p', 'dependency-state-note', t('Dependency graph not saved')));
+  if (graph.status === 'unavailable' && activeRun.dependencyGraph) graphStatus.append(el('p', 'dependency-state-note', t('Dependency graph unavailable detail')));
+  const coverage = el('details', 'dependency-coverage');
+  coverage.append(el('summary', '', t('Scope and limitations')));
+  const coverageBody = el('div', 'dependency-coverage-body');
+  coverageBody.append(el('p', '', t('Dependency Map scope')));
+  if (graph.lockfiles?.length) {
+    const lockfiles = el('ul', 'dependency-lockfiles');
+    lockfiles.setAttribute('aria-label', t('Lockfiles'));
+    for (const file of graph.lockfiles) lockfiles.append(el('li', '', `${file.path} · ${t('Lockfile version')} ${file.lockfileVersion ?? t('Unknown')}`));
+    coverageBody.append(lockfiles);
+  }
+  for (const limitation of graph.limitations ?? []) coverageBody.append(el('p', 'dependency-notice', t(limitation)));
+  coverage.append(coverageBody);
+  graphStatus.append(coverage);
+  parent.append(graphStatus);
+
+  const mapLayout = el('div', 'dependency-map-layout');
+  const mapMain = el('div', 'dependency-map-main');
+  const detailPanel = el('aside', 'dependency-detail-panel');
+  detailPanel.setAttribute('aria-label', t('Selected package details'));
+  mapLayout.append(mapMain, detailPanel);
+  parent.append(mapLayout);
+
+  const controls = el('div', 'dependency-controls');
+  const searchLabel = el('label', 'dependency-search');
+  searchLabel.append(el('span', '', t('Search packages')));
+  const search = el('input');
+  search.id = 'dependency-search-input'; search.type = 'search'; search.value = dependencyQuery; search.autocomplete = 'off';
+  searchLabel.htmlFor = search.id;
+  search.addEventListener('input', () => {
+    const cursor = search.selectionStart;
+    dependencyQuery = search.value; dependencyListPage = 1; selectedDependencyId = null; drawDesktopDependencies();
+    const nextSearch = $('dependency-search-input'); nextSearch?.focus({ preventScroll: true });
+    if (cursor !== null) nextSearch?.setSelectionRange(cursor, cursor);
+  });
+  searchLabel.append(search);
+  const scopeLabel = el('label', 'dependency-filter');
+  scopeLabel.append(el('span', '', t('Relationship scope')));
+  const scopeSelect = el('select');
+  for (const [value, label] of [['all', 'All relationships'], ['direct', 'Direct dependencies'], ['transitive', 'Transitive dependencies']]) {
+    const option = el('option', '', t(label)); option.value = value; scopeSelect.append(option);
+  }
+  scopeSelect.value = dependencyScope;
+  scopeSelect.addEventListener('change', () => { dependencyScope = scopeSelect.value; selectedDependencyId = null; drawDesktopDependencies(); });
+  scopeLabel.append(scopeSelect);
+  controls.append(searchLabel, scopeLabel);
+  mapMain.append(controls);
+
+  if (graph.status !== 'unavailable' && graph.nodes.length) {
+    if (graph.tooLarge) {
+      mapMain.append(el('p', 'dependency-notice dependency-fallback-note', t('Dependency graph relation fallback')));
+    } else {
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.classList.add('dependency-graph');
+      const compactGraph = graph.nodes.length <= 8;
+      if (compactGraph) svg.classList.add('dependency-graph-compact');
+      svg.setAttribute('role', 'group');
+      svg.setAttribute('aria-label', t('Dependency graph accessible label'));
+      const layout = layoutDependencyGraph(graph, compactGraph ? { nodeWidth: 138, nodeHeight: 44, columnGap: 18, rowGap: 16, margin: 18 } : {});
+      svg.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+      svg.setAttribute('width', String(layout.width));
+      svg.setAttribute('height', String(layout.height));
+      svg.style.width = `${layout.width}px`;
+      svg.style.height = `${layout.height}px`;
+      const defs = document.createElementNS(svgNS, 'defs');
+      const marker = document.createElementNS(svgNS, 'marker');
+      marker.id = 'dependency-arrow'; marker.setAttribute('viewBox', '0 0 8 8'); marker.setAttribute('refX', '8'); marker.setAttribute('refY', '4');
+      marker.setAttribute('markerWidth', '8'); marker.setAttribute('markerHeight', '8'); marker.setAttribute('markerUnits', 'userSpaceOnUse'); marker.setAttribute('orient', 'auto');
+      const arrow = document.createElementNS(svgNS, 'path'); arrow.setAttribute('d', 'M 0 0 L 8 4 L 0 8 Z'); arrow.setAttribute('class', 'dependency-arrow'); marker.append(arrow); defs.append(marker); svg.append(defs);
+      const directIds = new Set(graph.allEdges.filter((edge) => edge.from === '.').map((edge) => edge.to));
+      const incomingIds = new Set(graph.allEdges.map((edge) => edge.to));
+      for (const edge of layout.edges) {
+        const line = document.createElementNS(svgNS, 'path');
+        line.setAttribute('d', edge.path);
+        line.setAttribute('class', `dependency-edge dependency-edge-${edge.kind} dependency-edge-route-${edge.route} dependency-edge-type-${edge.relationship}`);
+        line.setAttribute('marker-end', 'url(#dependency-arrow)');
+        line.setAttribute('aria-hidden', 'true');
+        const edgeTitle = document.createElementNS(svgNS, 'title');
+        edgeTitle.textContent = edge.relationship === 'workspaceLink' || edge.relationship === 'workspaceMember' ? t('Workspace dependency') : edge.relationship === 'peerDependency' ? t('Peer dependency') : t(edge.kind === 'direct' ? 'Direct dependency' : 'Transitive dependency');
+        line.append(edgeTitle);
+        svg.append(line);
+      }
+      const rootGroup = document.createElementNS(svgNS, 'g');
+      rootGroup.setAttribute('class', 'dependency-root');
+      const root = layout.positions.get('.');
+      const rootRect = document.createElementNS(svgNS, 'rect'); rootRect.setAttribute('x', String(root.x)); rootRect.setAttribute('y', String(root.y)); rootRect.setAttribute('width', String(layout.nodeWidth)); rootRect.setAttribute('height', String(layout.nodeHeight)); rootGroup.append(rootRect);
+      const rootName = graph.root?.name || projectName(activeRun);
+      rootGroup.setAttribute('aria-label', rootName);
+      const textLimit = compactGraph ? 18 : 22;
+      const rootText = document.createElementNS(svgNS, 'text'); rootText.setAttribute('x', String(root.x + 10)); rootText.setAttribute('y', String(root.y + 28)); rootText.textContent = svgLabel(rootName, textLimit); rootGroup.append(rootText);
+      const rootTitle = document.createElementNS(svgNS, 'title'); rootTitle.textContent = rootName; rootGroup.append(rootTitle); svg.append(rootGroup);
+      for (const node of graph.nodes) {
+        const point = layout.positions.get(node.id);
+        const group = document.createElementNS(svgNS, 'g');
+        group.setAttribute('class', `dependency-node${selectedDependencyId === node.id ? ' selected' : ''}${node.kind === 'workspace' || node.kind === 'workspace-link' ? ' dependency-workspace-node' : ''}`);
+        group.setAttribute('tabindex', '0'); group.setAttribute('role', 'button');
+        const relationshipLabel = directIds.has(node.id) ? t('Direct dependency') : incomingIds.has(node.id) ? t('Transitive dependency') : t('No recorded parent relationship');
+        group.setAttribute('aria-label', `${node.name}${node.version ? ` ${node.version}` : ''} · ${node.path ?? node.id} · ${relationshipLabel}`);
+        const rect = document.createElementNS(svgNS, 'rect'); rect.setAttribute('x', String(point.x)); rect.setAttribute('y', String(point.y)); rect.setAttribute('width', String(layout.nodeWidth)); rect.setAttribute('height', String(layout.nodeHeight)); group.append(rect);
+        const label = document.createElementNS(svgNS, 'text'); label.setAttribute('x', String(point.x + 10)); label.setAttribute('y', String(point.y + 19)); label.textContent = svgLabel(node.name, textLimit); group.append(label);
+        const title = document.createElementNS(svgNS, 'title'); title.textContent = `${node.name}${node.version ? ` ${node.version}` : ''}\n${node.path ?? node.id}`; group.append(title);
+        const version = document.createElementNS(svgNS, 'text'); version.setAttribute('x', String(point.x + 10)); version.setAttribute('y', String(point.y + 37)); version.setAttribute('class', 'dependency-node-version'); version.textContent = svgLabel(node.version, compactGraph ? 19 : 25); group.append(version);
+        const selectNode = () => { selectedDependencyId = node.id; dependencyRelationPage = { incoming: 1, outgoing: 1 }; drawDesktopDependencies(); parent.querySelector('.dependency-node.selected')?.focus(); parent.querySelector('.dependency-detail')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }); };
+        group.addEventListener('click', selectNode);
+        group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(); } });
+        svg.append(group);
+      }
+      const scroll = el('div', 'dependency-graph-scroll');
+      scroll.append(svg);
+      mapMain.append(scroll);
+      const scrollHint = el('p', 'dependency-scroll-hint', t('Dependency graph scroll hint'));
+      scrollHint.hidden = true;
+      scrollHint.setAttribute('role', 'status');
+      mapMain.append(scrollHint);
+      if ('ResizeObserver' in window) {
+        dependencyGraphResizeObserver = new ResizeObserver(() => { scrollHint.hidden = scroll.scrollWidth <= scroll.clientWidth + 1; });
+        dependencyGraphResizeObserver.observe(scroll);
+        requestAnimationFrame(() => { scrollHint.hidden = scroll.scrollWidth <= scroll.clientWidth + 1; });
+      }
+      const legend = el('ul', 'dependency-legend');
+      legend.append(el('li', 'legend-direct', t('Direct dependency')), el('li', 'legend-transitive', t('Transitive dependency')), el('li', 'legend-workspace', t('Workspace dependency')));
+      mapMain.append(legend);
+    }
+    const packageListDisclosure = el('details', 'dependency-package-list-disclosure');
+    packageListDisclosure.open = graph.tooLarge || dependencyListOpen;
+    packageListDisclosure.addEventListener('toggle', () => { dependencyListOpen = packageListDisclosure.open; });
+    packageListDisclosure.append(el('summary', '', t('Dependency package list count', { v0: graph.totalNodes })));
+    const packageList = el('ul', 'dependency-graph-list');
+    packageList.setAttribute('aria-label', t('Dependency package list'));
+    const graphPage = pageItems(graph.nodes, dependencyListPage);
+    dependencyListPage = graphPage.page;
+    for (const node of graphPage.items) {
+      const row = el('li');
+      const button = el('button', 'quiet-button', `${node.name}${node.version ? ` ${node.version}` : ''} · ${node.path ?? node.id}`);
+      button.type = 'button'; button.setAttribute('aria-pressed', String(selectedDependencyId === node.id));
+      button.addEventListener('click', () => { selectedDependencyId = node.id; dependencyRelationPage = { incoming: 1, outgoing: 1 }; dependencyDetailOpen = { incoming: false, outgoing: false, vulnerabilities: false }; drawDesktopDependencies(); parent.querySelector('.dependency-graph-list [aria-pressed="true"]')?.focus(); parent.querySelector('.dependency-detail')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }); });
+      row.append(button); packageList.append(row);
+    }
+    packageListDisclosure.append(packageList);
+    if (graphPage.pages > 1) drawPager(packageListDisclosure, graphPage, (number) => { dependencyListPage = number; drawDesktopDependencies(); });
+    mapMain.append(packageListDisclosure);
+    const selected = graph.allNodes.find((node) => node.id === selectedDependencyId);
+    if (selected) {
+      const detail = el('section', 'dependency-detail'); detail.setAttribute('aria-live', 'polite');
+      detail.append(el('h3', '', `${selected.name}${selected.version ? ` ${selected.version}` : ''}`));
+      if (selected.path) detail.append(el('p', 'mono', selected.path));
+      const directIds = new Set(graph.allEdges.filter((edge) => edge.from === '.').map((edge) => edge.to));
+      const hasIncoming = graph.allEdges.some((edge) => edge.to === selected.id);
+      detail.append(el('p', 'dependency-kind', t(directIds.has(selected.id) ? 'Direct dependency' : hasIncoming ? 'Transitive dependency' : 'No recorded parent relationship')));
+
+      const relationshipNames = {
+        dependency: 'Dependency relationship', devDependency: 'Development dependency', optionalDependency: 'Optional dependency',
+        peerDependency: 'Peer dependency', workspaceLink: 'Workspace dependency', workspaceMember: 'Workspace membership',
+      };
+      const drawRelations = (direction) => {
+        const incoming = direction === 'incoming';
+        const relationships = graph.allEdges.filter((edge) => incoming ? edge.to === selected.id : edge.from === selected.id);
+        if (!relationships.length) return;
+        const section = el('details', 'dependency-relations');
+        section.open = dependencyDetailOpen[direction];
+        section.addEventListener('toggle', () => { dependencyDetailOpen[direction] = section.open; });
+        section.append(el('summary', '', t(incoming ? 'Parent packages count' : 'Dependency packages count', { v0: relationships.length })));
+        const page = pageItems(relationships, dependencyRelationPage[direction]);
+        dependencyRelationPage[direction] = page.page;
+        const list = el('ul', 'dependency-relations-list');
+        for (const edge of page.items) {
+          const otherId = incoming ? edge.from : edge.to;
+          const other = otherId === '.' ? graph.root : graph.allNodes.find((node) => node.id === otherId);
+          if (!other) continue;
+          const item = el('li');
+          const name = `${other.name}${other.version ? ` ${other.version}` : ''} · ${other.path ?? other.id}`;
+          const label = otherId === '.' ? el('span', 'dependency-relation-target', name) : el('button', 'quiet-button dependency-relation-target', name);
+          if (otherId !== '.') {
+            label.type = 'button';
+            label.addEventListener('click', () => {
+              dependencyQuery = ''; dependencyScope = 'all';
+              const index = graph.allNodes.findIndex((node) => node.id === otherId);
+              dependencyListPage = Math.floor(Math.max(0, index) / 100) + 1;
+              selectedDependencyId = otherId; dependencyRelationPage = { incoming: 1, outgoing: 1 };
+              drawDesktopDependencies();
+              parent.querySelector('.dependency-node.selected, .dependency-graph-list [aria-pressed="true"]')?.focus();
+            });
+          }
+          item.append(el('span', 'tag', t(relationshipNames[edge.relationship] ?? 'Unknown')), label);
+          list.append(item);
+        }
+        section.append(list);
+        if (page.pages > 1) drawPager(section, page, (number) => { dependencyRelationPage[direction] = number; dependencyDetailOpen[direction] = true; drawDesktopDependencies(); });
+        detail.append(section);
+      };
+      drawRelations('incoming');
+      drawRelations('outgoing');
+      const matches = allFindings.flatMap((finding, index) => {
+        const pkg = findingPackage(finding);
+        const locationPackage = finding.location?.package;
+        const ecosystem = finding.evidence?.package?.ecosystem ?? (typeof locationPackage === 'string' && locationPackage.includes(':') ? locationPackage.slice(0, locationPackage.indexOf(':')) : undefined);
+        return ecosystem === 'npm' && pkg.name === selected.name && Boolean(pkg.version) && pkg.version === selected.version ? [index] : [];
+      });
+      if (matches.length) {
+        const vulnerabilityDetails = el('details', 'dependency-relations');
+        vulnerabilityDetails.open = dependencyDetailOpen.vulnerabilities;
+        vulnerabilityDetails.addEventListener('toggle', () => { dependencyDetailOpen.vulnerabilities = vulnerabilityDetails.open; });
+        vulnerabilityDetails.append(el('summary', '', t('Related vulnerabilities count', { v0: matches.length })));
+        const vulnerabilityList = el('ul', 'dependency-relations-list');
+        for (const index of matches) {
+          const finding = allFindings[index];
+          const item = el('li');
+          const button = advisoryText(el('button', 'quiet-button'), finding.title ?? t('제목 미기록'));
+          button.type = 'button'; button.addEventListener('click', () => openDependencyFinding(index));
+          item.append(severityBadge(finding), button); vulnerabilityList.append(item);
+        }
+        vulnerabilityDetails.append(vulnerabilityList);
+        detail.append(vulnerabilityDetails);
+      } else detail.append(el('p', 'dependency-notice dependency-empty-vulnerabilities', t('No linked vulnerabilities')));
+      detailPanel.append(detail);
+    } else {
+      detailPanel.append(el('p', 'dependency-selection-hint', t('Select a package to see its parents, dependencies, and vulnerabilities.')));
+    }
+  } else if (graph.status !== 'unavailable') {
+    mapMain.append(el('p', 'dependency-notice', t('No graph packages match')));
+  } else {
+    detailPanel.append(el('p', 'dependency-selection-hint', t('Select a package to see its parents, dependencies, and vulnerabilities.')));
+  }
+
+  if (!reportedPackages.length) {
+    parent.append(el('p', 'dependency-empty-vulnerabilities', t('No reported vulnerable packages')));
+    return;
+  }
+  const reportedDisclosure = el('details', 'dependency-reported-list');
+  reportedDisclosure.open = reportedPackagesOpen;
+  reportedDisclosure.addEventListener('toggle', () => { reportedPackagesOpen = reportedDisclosure.open; });
+  reportedDisclosure.append(el('summary', '', t('Reported vulnerable packages count', { v0: reportedPackages.length })));
   const page = pageItems(reportedPackages, dependencyPage);
   dependencyPage = page.page;
-  parent.append(el('p', 'dependency-scope', t('{v0}에서 취약점이 보고된 패키지만 표시합니다. 패키지 목록과 의존 관계는 이 보고서의 범위에 포함되지 않습니다.', { v0: projectName(activeRun) })));
   const list = el('ul', 'dependency-list');
   for (const entry of page.items) {
     const record = el('li', 'dependency-record');
@@ -669,8 +929,9 @@ function drawDesktopDependencies() {
     record.append(findings);
     list.append(record);
   }
-  parent.append(list);
-  if (page.pages > 1) drawPager(parent, page, (number) => { dependencyPage = number; drawDesktopDependencies(); });
+  reportedDisclosure.append(list);
+  if (page.pages > 1) drawPager(reportedDisclosure, page, (number) => { dependencyPage = number; reportedPackagesOpen = true; drawDesktopDependencies(); });
+  parent.append(reportedDisclosure);
 }
 function drawPager(parent, info, onPage) {
   const pager = el('div', 'pager');
@@ -1028,6 +1289,14 @@ async function selectArtifact(id, { projectKind } = {}) {
   const generation = catalogGeneration;
   selectedId = id;
   activeRun = null;
+  dependencyQuery = '';
+  dependencyScope = 'all';
+  selectedDependencyId = null;
+  dependencyListPage = 1;
+  dependencyRelationPage = { incoming: 1, outgoing: 1 };
+  dependencyListOpen = false;
+  dependencyDetailOpen = { incoming: false, outgoing: false, vulnerabilities: false };
+  reportedPackagesOpen = false;
   savedComparison = null;
   selectedArtifact = null;
   allFindings = [];

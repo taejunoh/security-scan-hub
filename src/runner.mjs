@@ -5,6 +5,7 @@ import { runProcess } from './processes.mjs';
 import { createRedactor, redactValue } from './redaction.mjs';
 import { atomicWriteFile, assertSafeDirectory, ensureSafeDirectory } from './safe-io.mjs';
 import { validateAgentOptions } from './config.mjs';
+import { collectDependencyGraph, unavailableDependencyGraph, validateDependencyGraph } from './dependency-graph.mjs';
 export { runProcess, createRedactor };
 
 function runDirectoryPath(out) {
@@ -117,6 +118,10 @@ export async function runScan(options) {
   const redact=createRedactor();
   const sanitize=value=>redactValue(value);
   const run={schemaVersion:1,id:randomUUID(),startedAt:new Date().toISOString(),target,status:'failed',tools:[],findings:[]};
+  try {
+    const dependencyGraph=sanitize(await collectDependencyGraph(target.path));
+    run.dependencyGraph=validateDependencyGraph(dependencyGraph)?dependencyGraph:unavailableDependencyGraph();
+  } catch { run.dependencyGraph=unavailableDependencyGraph(); }
   if(options.projectKind==='demo')run.projectKind='demo';
   for(const adapter of available){
     const record={id:adapter.id,name:adapter.name,source:adapter.source,selected:selected.has(adapter.id),status:'skipped',findings:[]};run.tools.push(record);

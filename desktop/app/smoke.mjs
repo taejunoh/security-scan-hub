@@ -150,10 +150,22 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
       const item = artifacts.find(({ summary }) => summary?.runId === ${JSON.stringify(demoJob.resultRunId)});
       if (item?.state !== 'ready' || item.summary.projectKind !== 'demo') return false;
       const { run } = await (await fetch('/api/artifacts/' + item.id)).json();
-      return { id: item.id, kind: run?.projectKind, tools: run?.tools?.filter(({ selected }) => selected).map(({ id, status }) => ({ id, status })) };
+      return { id: item.id, kind: run?.projectKind, graph: run?.dependencyGraph,
+        tools: run?.tools?.filter(({ selected }) => selected).map(({ id, status }) => ({ id, status })) };
     })()`), 7000, 'demo_report_not_opened');
     const realOsv = demoArtifact.kind === 'demo' && demoArtifact.tools?.length === 1
       && demoArtifact.tools[0].id === 'osv' && demoArtifact.tools[0].status === 'completed';
+    const demoGraph = demoArtifact.graph;
+    const lodash = demoGraph?.nodes?.find(({ name }) => name === 'lodash');
+    const graphRecorded = demoGraph?.status === 'complete' && lodash?.version === '4.17.20'
+      && demoGraph.edges?.some(({ from, to }) => from === '.' && to === lodash.id);
+    await click('desktop-nav-dependencies');
+    const graphVisible = await waitFor(() => invoke(`(() => {
+      const panel = document.querySelector('#desktop-dependencies');
+      return Boolean(panel?.getClientRects().length && panel.textContent.includes('lodash')
+        && panel.querySelector('.dependency-graph .dependency-node'));
+    })()`), 5000, 'demo_dependency_graph_missing');
+    await click('desktop-nav-results');
     const outsideDemoStatus = (await fetch(new URL(`api/artifacts/${demoArtifact.id}`, controller.current.url))).status;
     await invoke("document.querySelector('.scan-result-example button').click()", true);
     const nextFolderGuide = await invoke("document.body.dataset.desktopView === 'scan' && !document.getElementById('desktop-folder-guide').hidden");
@@ -162,8 +174,8 @@ export async function runPackagedSmoke({ directory, window, controller, actions,
     await click('desktop-results-history');
     const demoHistory = await waitFor(() => invoke(`document.body.dataset.desktopResults === 'history'
       && Array.from(document.querySelectorAll('#artifact-list button')).some((button) => button.textContent.includes('Example scan results'))`), 5000, 'demo_history_missing');
-    summary.demoScan = { ...summary.demoScan, artifactId: demoArtifact.id, tools: demoArtifact.tools, outsideDemoStatus, nextFolderGuide, demoHistory };
-    summary.checks.demoScan = realOsv && outsideDemoStatus === 404 && nextFolderGuide && demoHistory;
+    summary.demoScan = { ...summary.demoScan, artifactId: demoArtifact.id, tools: demoArtifact.tools, outsideDemoStatus, nextFolderGuide, demoHistory, graphRecorded, graphVisible };
+    summary.checks.demoScan = realOsv && graphRecorded && graphVisible && outsideDemoStatus === 404 && nextFolderGuide && demoHistory;
     if (!summary.checks.demoScan) throw Error('demo_scan_provenance_mismatch');
     const initial = controller.current.url;
     const selected = path.join(directory, 'controlled-results');

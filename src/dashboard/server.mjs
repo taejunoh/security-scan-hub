@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { compareRuns } from '../compare.mjs';
 import { redactValue } from '../redaction.mjs';
 import { loadCatalog } from './catalog.mjs';
+import { unavailableDependencyGraph, validateDependencyGraph } from '../dependency-graph.mjs';
 import { RequestPolicyError, validateRequest } from './http-policy.mjs';
 import { createExecutionSession, ExecutionPolicyError, readExecutionJson, validateExecutionRequest } from './execution-policy.mjs';
 
@@ -21,6 +22,9 @@ const RUN_STATUSES = new Set(['completed', 'partial', 'failed']);
 const TOOL_STATUSES = new Set(['completed', 'failed', 'skipped', 'timed_out', 'cancelled', 'imported']);
 const SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info', 'unknown']);
 const VERIFICATIONS = new Set(['candidate', 'reported', 'confirmed']);
+const GRAPH_STATUSES = new Set(['complete', 'partial', 'unavailable']);
+const GRAPH_NODE_KINDS = new Set(['project', 'package', 'workspace', 'workspace-link']);
+const GRAPH_EDGE_KINDS = new Set(['dependency', 'devDependency', 'optionalDependency', 'peerDependency', 'workspaceLink', 'workspaceMember']);
 const COMPARISON_CATEGORIES = new Set(['new', 'regressed', 'existing', 'resolved', 'unobserved']);
 const IDENTITY_METHODS = new Set(['native', 'dependency', 'location', 'weak']);
 const ERROR_MESSAGES = Object.freeze({
@@ -90,8 +94,19 @@ function redactFinding(finding, redact) {
   if (sourceRecords !== undefined) safe.sourceRecords = Array.isArray(sourceRecords) ? sourceRecords.map((item) => redactFinding(item, redact)) : redact(sourceRecords);
   return safe;
 }
+function redactDependencyGraph(graph, redact) {
+  return {
+    schema: 'sec-hub.dependency-graph/v1',
+    status: GRAPH_STATUSES.has(graph.status) ? graph.status : redact(graph.status),
+    ecosystem: 'npm',
+    lockfiles: graph.lockfiles.map(file => ({ path: file.path, lockfileVersion: file.lockfileVersion })),
+    nodes: graph.nodes.map(node => ({ id: redact(node.id), path: redact(node.path), name: redact(node.name), kind: GRAPH_NODE_KINDS.has(node.kind) ? node.kind : redact(node.kind), ...(node.version !== undefined ? { version: redact(node.version) } : {}) })),
+    edges: graph.edges.map(edge => ({ from: redact(edge.from), to: redact(edge.to), kind: GRAPH_EDGE_KINDS.has(edge.kind) ? edge.kind : redact(edge.kind) })),
+    limitations: graph.limitations.map(redact),
+  };
+}
 function redactRun(run, redact) {
-  const { schemaVersion, status, target, tools, findings, projectKind, ...rest } = run;
+  const { schemaVersion, status, target, tools, findings, projectKind, dependencyGraph, ...rest } = run;
   const safe = redactFields(rest, ['id', 'startedAt', 'endedAt', 'provenance', 'verification', 'verificationPassed', 'pendingIntegrations'], redact);
   safe.schemaVersion = schemaVersion;
   if (projectKind === 'demo') safe.projectKind = 'demo';
@@ -106,6 +121,10 @@ function redactRun(run, redact) {
     return item;
   }) : redact(tools);
   if (findings !== undefined) safe.findings = Array.isArray(findings) ? findings.map((finding) => redactFinding(finding, redact)) : redact(findings);
+  if (dependencyGraph !== undefined) {
+    const redactedGraph = redactDependencyGraph(dependencyGraph, redact);
+    safe.dependencyGraph = validateDependencyGraph(redactedGraph) ? redactedGraph : unavailableDependencyGraph();
+  }
   return safe;
 }
 function redactComparison(comparison, redact, generated = false) {
@@ -135,7 +154,7 @@ function redactComparison(comparison, redact, generated = false) {
 function redactSummary(summary, kind, redact) {
   if (!summary) return summary;
   if (kind === 'run') {
-    return { runId: redact(summary.runId), ...(summary.projectKind === 'demo' ? { projectKind: 'demo' } : {}), status: RUN_STATUSES.has(summary.status) ? summary.status : redact(summary.status), target: { path: redact(summary.target.path), ...(summary.target.revision !== undefined ? { revision: redact(summary.target.revision) } : {}), ...(typeof summary.target.dirty === 'boolean' ? { dirty: summary.target.dirty } : {}) }, startedAt: redact(summary.startedAt), endedAt: redact(summary.endedAt), findingCount: summary.findingCount, tools: summary.tools.map((tool) => ({ id: redact(tool.id), status: TOOL_STATUSES.has(tool.status) ? tool.status : redact(tool.status), ...(tool.selected !== undefined ? { selected: tool.selected } : {}) })) };
+    return { runId: redact(summary.runId), ...(summary.projectKind === 'demo' ? { projectKind: 'demo' } : {}), status: RUN_STATUSES.has(summary.status) ? summary.status : redact(summary.status), target: { path: redact(summary.target.path), ...(summary.target.revision !== undefined ? { revision: redact(summary.target.revision) } : {}), ...(typeof summary.target.dirty === 'boolean' ? { dirty: summary.target.dirty } : {}) }, startedAt: redact(summary.startedAt), endedAt: redact(summary.endedAt), findingCount: summary.findingCount, tools: summary.tools.map((tool) => ({ id: redact(tool.id), status: TOOL_STATUSES.has(tool.status) ? tool.status : redact(tool.status), ...(tool.selected !== undefined ? { selected: tool.selected } : {}) })), ...(summary.dependencyGraph ? { dependencyGraph: { status: GRAPH_STATUSES.has(summary.dependencyGraph.status) ? summary.dependencyGraph.status : redact(summary.dependencyGraph.status), ecosystem: 'npm', packageCount: summary.dependencyGraph.packageCount, relationshipCount: summary.dependencyGraph.relationshipCount, limitations: summary.dependencyGraph.limitations.map(redact) } } : {}) };
   }
   return { baselineId: redact(summary.baselineId), currentId: redact(summary.currentId), target: { path: redact(summary.target.path) }, status: summary.status, counts: { ...summary.counts }, gate: { failOn: summary.gate.failOn, exitCode: summary.gate.exitCode } };
 }

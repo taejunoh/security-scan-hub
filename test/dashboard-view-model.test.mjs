@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { categoryLabel, compactPath, comparisonControlState, filterArtifacts, filterFindings, findingAction, findingPackage, reportedDependencyPackages, gateLabel, pageItems, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from '../src/web/view-model.mjs';
+import { categoryLabel, compactPath, comparisonControlState, dependencyGraphView, dependencyMapAvailable, filterArtifacts, filterFindings, findingAction, findingPackage, layoutDependencyGraph, reportedDependencyPackages, gateLabel, pageItems, runStatusLabel, sortFindingsBySeverity, toolStatusLabel, verificationLabel, transitionFindingView } from '../src/web/view-model.mjs';
 
 const artifacts = [
   { id: 'a'.repeat(64), kind: 'run', state: 'ready', label: 'runs/one/run.json', summary: { runId: 'same', status: 'partial', target: { path: '/alpha' }, tools: [{ id: 'osv', status: 'imported' }] } },
@@ -9,6 +9,21 @@ const artifacts = [
   { id: 'c'.repeat(64), kind: 'comparison', state: 'ready', label: 'comparison.json', summary: { baselineId: 'same', currentId: 'same', status: 'incomplete', target: { path: '/alpha' } } },
   { id: 'd'.repeat(64), kind: 'unknown', state: 'error', label: 'bad/run.json', error: { code: 'invalid_artifact' } },
 ];
+
+function svgPathEnd(path) {
+  const tokens = path.match(/[A-Za-z]|-?\d+(?:\.\d+)?/g) ?? [];
+  let index = 0; let command; let x = 0; let y = 0;
+  while (index < tokens.length) {
+    if (/^[A-Za-z]$/.test(tokens[index])) command = tokens[index++];
+    if (command === 'M') { x = Number(tokens[index++]); y = Number(tokens[index++]); command = 'L'; }
+    else if (command === 'L') { x = Number(tokens[index++]); y = Number(tokens[index++]); }
+    else if (command === 'H') x = Number(tokens[index++]);
+    else if (command === 'V') y = Number(tokens[index++]);
+    else if (command === 'C') { index += 4; x = Number(tokens[index++]); y = Number(tokens[index++]); }
+    else throw new Error(`Unsupported SVG path command: ${command}`);
+  }
+  return { x, y };
+}
 
 test('filters intersect and search displayed text case-insensitively', () => {
   assert.deepEqual(filterArtifacts(artifacts, { query: 'ALPHA', kind: 'run', status: 'partial', tool: 'osv' }).map(x => x.id), ['a'.repeat(64)]);
@@ -306,4 +321,169 @@ test('dependency packages group reported findings by ecosystem, name and version
     { ecosystem: 'PyPI', name: 'shared', version: '1.2.3', sources: [], findingIndices: [4] },
     { ecosystem: 'npm', name: 'shared', version: undefined, sources: [], findingIndices: [5] },
   ]);
+});
+
+test('dependency graph view uses recorded npm node identities and keeps workspace edges while filtering', () => {
+  const graph = {
+    schema: 'sec-hub.dependency-graph/v1', status: 'complete', ecosystem: 'npm',
+    lockfiles: [{ path: 'package-lock.json', lockfileVersion: 3 }], limitations: [],
+    nodes: [
+      { id: '.', name: 'app', path: '' },
+      { id: 'node_modules/shared', name: 'shared', version: '1.0.0', path: 'node_modules/shared' },
+      { id: 'node_modules/app', name: 'app', version: '2.0.0', path: 'node_modules/app', kind: 'workspace-link' },
+      { id: 'packages/app', name: 'app', version: '2.0.0', path: 'packages/app', kind: 'workspace' },
+      { id: 'node_modules/other/node_modules/shared', name: 'shared', version: '2.0.0', path: 'node_modules/other/node_modules/shared' },
+    ],
+    edges: [
+      { from: '.', to: 'node_modules/shared', kind: 'dependency', requested: '^1' },
+      { from: '.', to: 'node_modules/app', kind: 'dependency' },
+      { from: 'packages/app', to: 'node_modules/shared', kind: 'workspaceLink' },
+      { from: 'node_modules/unknown', to: 'node_modules/shared', kind: 'dependency' },
+      { from: '.', to: 'missing', kind: 'dependency' },
+    ],
+  };
+  const view = dependencyGraphView(graph);
+  assert.deepEqual(view.nodes.map(({ id }) => id), [
+    'node_modules/shared', 'node_modules/app', 'packages/app', 'node_modules/other/node_modules/shared',
+  ]);
+  assert.deepEqual(view.edges.map(({ from, to, kind, relationship }) => [from, to, kind, relationship]), [
+    ['.', 'node_modules/shared', 'direct', 'dependency'],
+    ['.', 'node_modules/app', 'direct', 'dependency'],
+    ['packages/app', 'node_modules/shared', 'transitive', 'workspaceLink'],
+  ]);
+  assert.equal('requested' in view.edges[0], false);
+  assert.equal(view.allEdges.length, 3);
+  assert.equal(view.root.id, '.');
+  assert.equal(view.lockfiles[0].lockfileVersion, 3);
+  assert.deepEqual(dependencyGraphView(graph, { query: '2.0.0' }).nodes.map(({ id }) => id), [
+    'node_modules/app', 'packages/app', 'node_modules/other/node_modules/shared',
+  ]);
+  assert.deepEqual(dependencyGraphView(graph, { scope: 'transitive' }).nodes.map(({ id }) => id), ['node_modules/shared']);
+  assert.equal(dependencyGraphView(undefined).status, 'unavailable');
+  assert.equal(dependencyGraphView({ ...graph, schema: 'sec-hub.dependency-graph/v2' }).status, 'unavailable');
+});
+
+test('dependency graph search remains bounded for a large saved inventory', () => {
+  const size = 3000;
+  const nodes = [{ id: '.', name: 'large-app', path: '.', kind: 'project' }];
+  const edges = [];
+  for (let i = 0; i < size; i += 1) {
+    const id = `node_modules/pkg-${i}`;
+    nodes.push({ id, name: `pkg-${i}`, version: '1.0.0', path: id, kind: 'package' });
+    edges.push({ from: i === 0 ? '.' : `node_modules/pkg-${i - 1}`, to: id, kind: i === 0 ? 'dependency' : 'optionalDependency' });
+  }
+  const graph = { schema: 'sec-hub.dependency-graph/v1', status: 'complete', ecosystem: 'npm', nodes, edges, lockfiles: [], limitations: [] };
+  const full = dependencyGraphView(graph);
+  assert.equal(full.totalNodes, size);
+  assert.equal(full.tooLarge, true);
+  assert.equal(full.nodes.length, size);
+  const search = dependencyGraphView(graph, { query: 'pkg-2999' });
+  assert.equal(search.nodes.length, 1);
+  assert.equal(search.nodes[0].id, 'node_modules/pkg-2999');
+  assert.equal(search.allEdges.length, size);
+  assert.ok(search.allEdges.some((edge) => edge.to === 'node_modules/pkg-2999' && edge.from === 'node_modules/pkg-2998'));
+  assert.equal(search.tooLarge, false);
+});
+
+test('dependency graph layout attaches forward, cycle, self and parallel edges within scroll bounds', () => {
+  const nodes = [
+    { id: '.', name: 'root', path: '.', kind: 'project' },
+    { id: 'node_modules/a', name: 'a', path: 'node_modules/a', kind: 'package' },
+    { id: 'node_modules/a/node_modules/b', name: 'b', path: 'node_modules/a/node_modules/b', kind: 'package' },
+    { id: 'node_modules/a/node_modules/b/node_modules/c', name: 'c', path: 'node_modules/a/node_modules/b/node_modules/c', kind: 'package' },
+    { id: 'node_modules/orphan', name: 'a very long orphan package name that should not affect the layout', path: 'node_modules/orphan', kind: 'package' },
+    { id: 'node_modules/direct-peer', name: 'direct-peer', path: 'node_modules/direct-peer', kind: 'package' },
+  ];
+  const graph = dependencyGraphView({
+    schema: 'sec-hub.dependency-graph/v1', status: 'complete', ecosystem: 'npm', nodes,
+    edges: [
+      { from: '.', to: nodes[1].id, kind: 'dependency' },
+      { from: '.', to: nodes[5].id, kind: 'dependency' },
+      { from: nodes[1].id, to: nodes[2].id, kind: 'dependency' },
+      { from: nodes[1].id, to: nodes[2].id, kind: 'peerDependency' },
+      { from: nodes[2].id, to: nodes[3].id, kind: 'optionalDependency' },
+      { from: nodes[3].id, to: nodes[1].id, kind: 'dependency' },
+      { from: nodes[2].id, to: nodes[2].id, kind: 'devDependency' },
+      { from: nodes[1].id, to: nodes[5].id, kind: 'peerDependency' },
+      { from: nodes[4].id, to: nodes[3].id, kind: 'dependency' },
+    ], lockfiles: [], limitations: [],
+  });
+  const layout = layoutDependencyGraph(graph);
+  assert.equal(layout.edges.length, 9, 'parallel and cyclic relationships are retained');
+  assert.equal(layout.positions.get(nodes[1].id).level, 1);
+  assert.equal(layout.positions.get(nodes[2].id).level, 2);
+  assert.equal(layout.positions.get(nodes[3].id).level, 3);
+  assert.equal(layout.positions.get(nodes[4].id).level, 1, 'unreachable nodes remain visible without being labeled direct');
+  assert.equal(graph.allEdges.some((edge) => edge.to === nodes[4].id), false, 'the orphan has no recorded parent edge');
+  const inside = ({ x, y }) => x >= 0 && y >= 0 && x <= layout.width && y <= layout.height;
+  for (const rect of layout.positions.values()) {
+    assert.ok(inside(rect));
+    assert.ok(rect.x + rect.width <= layout.width);
+    assert.ok(rect.y + rect.height <= layout.height);
+  }
+  for (const edge of layout.edges) {
+    const from = layout.positions.get(edge.from);
+    const to = layout.positions.get(edge.to);
+    assert.ok(inside(edge.start)); assert.ok(inside(edge.end));
+    assert.ok(edge.controls.every(inside), 'all path control points fit in the scroll viewBox');
+    assert.ok(edge.path.startsWith(`M ${edge.start.x} ${edge.start.y}`));
+    assert.deepEqual(svgPathEnd(edge.path), edge.end, 'SVG path endpoint equals the returned node boundary anchor');
+    if (edge.route === 'forward') {
+      assert.equal(edge.start.x, from.x + layout.nodeWidth, 'forward edge starts on source right boundary');
+      assert.equal(edge.end.x, to.x, 'forward edge ends on target left boundary');
+    } else if (edge.route === 'back') {
+      assert.equal(edge.start.x, from.x + layout.nodeWidth, 'back edge starts on source right boundary');
+      assert.equal(edge.end.x, to.x + layout.nodeWidth, 'back edge ends on target right boundary');
+      assert.ok(edge.controls.some((point) => point.y > Math.max(from.y, to.y) + layout.nodeHeight), 'cycle edge takes a distinct outside lane');
+    } else if (edge.route === 'skip') {
+      assert.equal(edge.start.x, from.x + layout.nodeWidth);
+      assert.equal(edge.end.x, to.x);
+      assert.ok(edge.controls.some((point) => point.y > Math.max(from.y, to.y) + layout.nodeHeight), 'skip-level edge routes around intervening columns');
+    } else {
+      assert.equal(edge.start.x, from.x + layout.nodeWidth);
+      assert.equal(edge.end.y, from.y + layout.nodeHeight, 'self edge returns to source bottom boundary');
+      assert.ok(edge.controls.some((point) => point.x > from.x + layout.nodeWidth && point.y > from.y + layout.nodeHeight));
+    }
+  }
+  const parallel = layout.edges.filter((edge) => edge.from === nodes[1].id && edge.to === nodes[2].id);
+  assert.equal(parallel.length, 2);
+  assert.notEqual(parallel[0].start.y, parallel[1].start.y, 'parallel edges use separate node ports');
+  assert.ok(layout.width > 760, 'deep graphs keep intrinsic width for horizontal scrolling');
+  assert.ok(layout.edges.some((edge) => edge.route === 'back' && edge.from === nodes[1].id && edge.to === nodes[5].id), 'same-level edge uses an outside route');
+  assert.ok(layout.edges.some((edge) => edge.route === 'skip' && edge.from === nodes[4].id && edge.to === nodes[3].id), 'unreachable source to a deep target uses an outside route');
+});
+
+test('compact dependency layout fits a three-package chain without shrinking its node labels', () => {
+  const nodes = [
+    { id: '.', name: 'application', path: '.', kind: 'project' },
+    { id: 'node_modules/express', name: 'express', version: '4.21.2', path: 'node_modules/express', kind: 'package' },
+    { id: 'node_modules/express/node_modules/accepts', name: 'accepts', version: '1.3.8', path: 'node_modules/express/node_modules/accepts', kind: 'package' },
+    { id: 'node_modules/express/node_modules/accepts/node_modules/ms', name: 'ms', version: '2.1.3', path: 'node_modules/express/node_modules/accepts/node_modules/ms', kind: 'package' },
+  ];
+  const graph = dependencyGraphView({
+    schema: 'sec-hub.dependency-graph/v1', status: 'complete', ecosystem: 'npm', nodes,
+    edges: [
+      { from: '.', to: nodes[1].id, kind: 'dependency' },
+      { from: nodes[1].id, to: nodes[2].id, kind: 'dependency' },
+      { from: nodes[2].id, to: nodes[3].id, kind: 'dependency' },
+    ], lockfiles: [], limitations: [],
+  });
+  const compact = layoutDependencyGraph(graph, { nodeWidth: 138, nodeHeight: 44, columnGap: 18, rowGap: 16, margin: 18 });
+  assert.equal(compact.width, 642);
+  assert.ok(compact.width <= 672, 'three package levels fit beside a compact detail panel');
+  assert.equal(compact.positions.get(nodes[3].id).x, 486);
+});
+
+test('a run with a dependency graph can open Dependency Map when it has no reported vulnerabilities', () => {
+  const run = {
+    dependencyGraph: {
+      schema: 'sec-hub.dependency-graph/v1', status: 'complete', ecosystem: 'npm',
+      nodes: Array.from({ length: 6 }, (_, index) => ({ id: `node_modules/pkg-${index}`, name: `pkg-${index}` })),
+      edges: [], lockfiles: [{ path: 'package-lock.json', lockfileVersion: 3 }], limitations: [],
+    },
+  };
+  const findings = [];
+  assert.equal(reportedDependencyPackages(findings).length, 0);
+  assert.equal(dependencyMapAvailable(run), true);
+  assert.equal(dependencyMapAvailable(null), false);
 });

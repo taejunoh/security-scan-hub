@@ -4,6 +4,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { compareRuns, comparisonGate, normalizeSavedTargetPath } from '../compare.mjs';
 import { normalizeFindings } from '../reports.mjs';
+import { validateDependencyGraph } from '../dependency-graph.mjs';
 
 const HARD = Object.freeze({ directoryEntries: 512, artifacts: 128, artifactBytes: 20 * 1024 * 1024, totalBytes: 64 * 1024 * 1024, findingLeavesPerRun: 5000, findingLeavesTotal: 20000 });
 const TOOL_STATUSES = new Set(['completed', 'failed', 'skipped', 'timed_out', 'cancelled', 'imported']);
@@ -132,6 +133,7 @@ function countFindingLeaves(findings) {
 
 function validateRun(payload, limits, state) {
   if (!isObject(payload) || payload.schemaVersion !== 1) throw coded('invalid_artifact');
+  if (payload.dependencyGraph !== undefined && !validateDependencyGraph(payload.dependencyGraph)) throw coded('invalid_artifact');
   const leaves = countFindingLeaves(payload.findings);
   if (leaves > limits.findingLeavesPerRun || state.findings + state.comparisonEntries + leaves > limits.findingLeavesTotal) throw coded('artifact_too_large');
   try { compareRuns(payload, payload, { failOn: 'none' }); } catch { throw coded('invalid_artifact'); }
@@ -145,6 +147,7 @@ function validateRun(payload, limits, state) {
     endedAt: payload.endedAt,
     findingCount: payload.findings.length,
     tools: payload.tools.map(({ id, status, selected }) => ({ id, status, ...(selected !== undefined ? { selected } : {}) })),
+    ...(payload.dependencyGraph ? { dependencyGraph: { status: payload.dependencyGraph.status, ecosystem: payload.dependencyGraph.ecosystem, packageCount: payload.dependencyGraph.nodes.length, relationshipCount: payload.dependencyGraph.edges.length, limitations: payload.dependencyGraph.limitations } } : {}),
   };
 }
 

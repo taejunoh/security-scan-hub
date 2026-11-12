@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, join, dirname, isAbsolute } from 'node:path';
 import { createRedactor, redactValue } from './redaction.mjs';
+import { validateDependencyGraph } from './dependency-graph.mjs';
 
 const VERSION='0.3.2';
 const HELP=`Sec Hub ${VERSION} — local security scanner orchestration
@@ -46,7 +47,7 @@ function parseArgs(args,allowed){
 function expectCount(values,min,max=min){if(values.length<min||values.length>max)throw new Error('Invalid arguments. Run sec-hub --help for usage.');}
 function validateRun(run){
   const statuses=['completed','partial','failed'],toolStatuses=['completed','failed','timed_out','cancelled','skipped','imported'];
-  if(!run||run.schemaVersion!==1||typeof run.id!=='string'||!run.id||typeof run.startedAt!=='string'||typeof run.endedAt!=='string'||!run.target||typeof run.target.path!=='string'||!statuses.includes(run.status)||!Array.isArray(run.tools)||!Array.isArray(run.findings)||run.tools.some(tool=>!tool||typeof tool.id!=='string'||!toolStatuses.includes(tool.status)||!Array.isArray(tool.findings)))throw new Error('Invalid saved run: expected canonical schema version 1');
+  if(!run||run.schemaVersion!==1||typeof run.id!=='string'||!run.id||typeof run.startedAt!=='string'||typeof run.endedAt!=='string'||!run.target||typeof run.target.path!=='string'||!statuses.includes(run.status)||!Array.isArray(run.tools)||!Array.isArray(run.findings)||run.tools.some(tool=>!tool||typeof tool.id!=='string'||!toolStatuses.includes(tool.status)||!Array.isArray(tool.findings))||run.dependencyGraph!==undefined&&!validateDependencyGraph(run.dependencyGraph))throw new Error('Invalid saved run: expected canonical schema version 1');
   return run;
 }
 export async function main(argv,{stdout=process.stdout,stderr=process.stderr}={}){

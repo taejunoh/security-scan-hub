@@ -78,6 +78,154 @@ export function reportedDependencyPackages(findings) {
   return [...packages.values()].map((entry) => ({ ...entry, sources: [...entry.sources] }));
 }
 
+export function dependencyMapAvailable(run) {
+  // Active runs can show the graph, a saved-data notice, and/or the reported packages section.
+  return Boolean(run && typeof run === 'object');
+}
+
+export function dependencyGraphView(graph, { query = '', scope = 'all', graphLimit = 32 } = {}) {
+  if (!graph) return { status: 'unavailable', nodes: [], edges: [], allNodes: [], allEdges: [], limitations: [] };
+  if (graph.schema !== 'sec-hub.dependency-graph/v1' || graph.ecosystem !== 'npm'
+    || !['complete', 'partial', 'unavailable'].includes(graph.status)) {
+    return { status: 'unavailable', nodes: [], edges: [], allNodes: [], allEdges: [], limitations: [] };
+  }
+  const validNodes = [];
+  const ids = new Set();
+  for (const node of asArray(graph.nodes)) {
+    if (typeof node?.id !== 'string' || !node.id || ids.has(node.id) || typeof node.name !== 'string' || !node.name) continue;
+    ids.add(node.id);
+    validNodes.push({ id: node.id, name: node.name, version: nonempty(node.version), path: nonempty(node.path), kind: nonempty(node.kind) });
+  }
+  const edges = asArray(graph.edges).filter((edge) => ids.has(edge?.from) && ids.has(edge?.to)
+    && ['dependency', 'devDependency', 'optionalDependency', 'peerDependency', 'workspaceLink', 'workspaceMember'].includes(edge?.kind))
+    .map((edge) => ({ from: edge.from, to: edge.to, kind: edge.from === '.' ? 'direct' : 'transitive', relationship: edge.kind }));
+  const directTargets = new Set(edges.filter((edge) => edge.kind === 'direct').map((edge) => edge.to));
+  const transitiveTargets = new Set(edges.filter((edge) => edge.kind === 'transitive').map((edge) => edge.to));
+  const q = text(query).trim();
+  const allowed = (node) => node.id !== '.' && (scope === 'all' || (scope === 'direct' ? directTargets : transitiveTargets).has(node.id))
+    && (!q || [node.name, node.version, node.path].map(text).join(' ').includes(q));
+  const allNodes = validNodes.filter((node) => node.id !== '.');
+  const nodes = allNodes.filter(allowed);
+  const visibleIds = new Set(nodes.map((node) => node.id));
+  const visibleEdges = edges.filter((edge) => visibleIds.has(edge.to) && (visibleIds.has(edge.from) || edge.from === '.'));
+  return {
+    status: graph.status,
+    nodes,
+    edges: visibleEdges,
+    allNodes,
+    allEdges: edges,
+    limitations: asArray(graph.limitations).filter((item) => typeof item === 'string').slice(0, 20),
+    lockfiles: asArray(graph.lockfiles).filter((item) => typeof item?.path === 'string').map(({ path, lockfileVersion }) => ({ path, lockfileVersion })),
+    root: validNodes.find((node) => node.id === '.'),
+    tooLarge: nodes.length > Math.max(1, graphLimit),
+    totalNodes: validNodes.filter((node) => node.id !== '.').length,
+    totalEdges: edges.length,
+  };
+}
+
+export function layoutDependencyGraph(graph, { nodeWidth = 190, nodeHeight = 48, columnGap = 82, rowGap = 28, margin = 28 } = {}) {
+  const nodes = asArray(graph?.nodes).filter((node) => typeof node?.id === 'string' && node.id !== '.');
+  const edges = asArray(graph?.edges).filter((edge) => typeof edge?.from === 'string' && typeof edge?.to === 'string');
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const bySource = new Map();
+  for (const edge of edges) {
+    if (edge.from !== '.' && !nodeIds.has(edge.from) || !nodeIds.has(edge.to)) continue;
+    if (!bySource.has(edge.from)) bySource.set(edge.from, []);
+    bySource.get(edge.from).push(edge.to);
+  }
+  const depths = new Map([['.', 0]]);
+  const queue = ['.'];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const source = queue[cursor];
+    for (const target of bySource.get(source) ?? []) {
+      if (depths.has(target)) continue;
+      depths.set(target, (depths.get(source) ?? 0) + 1);
+      queue.push(target);
+    }
+  }
+  for (const node of nodes) if (!depths.has(node.id)) depths.set(node.id, 1);
+  const levels = new Map();
+  for (const node of nodes) {
+    const level = depths.get(node.id);
+    if (!levels.has(level)) levels.set(level, []);
+    levels.get(level).push(node);
+  }
+  const maxLevel = Math.max(0, ...levels.keys());
+  const rowStep = nodeHeight + rowGap;
+  const maxRows = Math.max(1, ...[...levels.values()].map((items) => items.length));
+  const height = margin * 2 + maxRows * rowStep - rowGap;
+  const positions = new Map();
+  const stepX = nodeWidth + columnGap;
+  for (const [level, items] of levels) {
+    items.forEach((node, index) => positions.set(node.id, { x: margin + level * stepX, y: margin + index * rowStep, width: nodeWidth, height: nodeHeight, level }));
+  }
+  const directCount = (levels.get(1) ?? []).length;
+  positions.set('.', { x: margin, y: margin + Math.max(0, (directCount - 1) * rowStep / 2), width: nodeWidth, height: nodeHeight, level: 0 });
+
+  const includedEdges = edges.filter((edge) => positions.has(edge.from) && positions.has(edge.to));
+  const outgoing = new Map(); const incoming = new Map();
+  includedEdges.forEach((edge, index) => {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+    outgoing.get(edge.from).push(index);
+    incoming.get(edge.to).push(index);
+  });
+  const edgeOffsets = (indices, endpoint) => {
+    indices.sort((a, b) => positions.get(endpoint(includedEdges[a])).y - positions.get(endpoint(includedEdges[b])).y || a - b);
+    return new Map(indices.map((index, order) => [index, indices.length < 2 ? 0 : (order / (indices.length - 1) - .5) * Math.min(24, nodeHeight - 8)]));
+  };
+  const outgoingOffsets = new Map(); const incomingOffsets = new Map();
+  for (const [id, indices] of outgoing) outgoingOffsets.set(id, edgeOffsets(indices, (edge) => edge.to));
+  for (const [id, indices] of incoming) incomingOffsets.set(id, edgeOffsets(indices, (edge) => edge.from));
+  const allNodeRects = [...positions.values()];
+  const rightmost = Math.max(...allNodeRects.map((rect) => rect.x + rect.width));
+  const selfEdgeCounts = new Map();
+  for (const edge of includedEdges) if (edge.from === edge.to) selfEdgeCounts.set(edge.from, (selfEdgeCounts.get(edge.from) ?? 0) + 1);
+  const selfEdgeOffsets = new Map();
+  let routeLaneIndex = 0;
+  const laidOutEdges = includedEdges.map((edge, index) => {
+    const from = positions.get(edge.from); const to = positions.get(edge.to);
+    const sourceY = from.y + nodeHeight / 2 + (outgoingOffsets.get(edge.from)?.get(index) ?? 0);
+    const targetY = to.y + nodeHeight / 2 + (incomingOffsets.get(edge.to)?.get(index) ?? 0);
+    let start; let end; let controls; let path;
+    if (edge.from === edge.to) {
+      const edgeOrdinal = selfEdgeOffsets.get(edge.from) ?? 0;
+      selfEdgeOffsets.set(edge.from, edgeOrdinal + 1);
+      const lane = from.x + nodeWidth + 16 + edgeOrdinal * 8;
+      start = { x: from.x + nodeWidth, y: from.y + nodeHeight / 2 };
+      end = { x: from.x + nodeWidth, y: from.y + nodeHeight };
+      controls = [{ x: lane, y: start.y }, { x: lane, y: end.y + 16 }];
+      path = `M ${start.x} ${start.y} H ${lane} V ${end.y + 16} H ${end.x} V ${end.y}`;
+    } else if (to.level === from.level + 1) {
+      start = { x: from.x + nodeWidth, y: sourceY };
+      end = { x: to.x, y: targetY };
+      const middle = (start.x + end.x) / 2;
+      controls = [{ x: middle, y: start.y }, { x: middle, y: end.y }];
+      path = `M ${start.x} ${start.y} C ${controls[0].x} ${controls[0].y}, ${controls[1].x} ${controls[1].y}, ${end.x} ${end.y}`;
+    } else if (to.level > from.level) {
+      const lane = height + 24 + routeLaneIndex++ * 18;
+      start = { x: from.x + nodeWidth, y: sourceY };
+      end = { x: to.x, y: targetY };
+      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x - 16, y: lane }, { x: end.x - 16, y: end.y }];
+      path = `M ${start.x} ${start.y} H ${controls[0].x} V ${lane} H ${controls[2].x} V ${end.y} H ${end.x}`;
+    } else {
+      const lane = height + 24 + routeLaneIndex++ * 18;
+      start = { x: from.x + nodeWidth, y: sourceY };
+      end = { x: to.x + nodeWidth, y: targetY };
+      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x + 16, y: lane }, { x: end.x + 16, y: end.y }];
+      path = `M ${start.x} ${start.y} H ${controls[0].x} V ${lane} H ${controls[2].x} V ${end.y} H ${end.x}`;
+    }
+    const route = edge.from === edge.to ? 'self' : to.level === from.level + 1 ? 'forward' : to.level > from.level ? 'skip' : 'back';
+    return { ...edge, start, end, controls, path, route };
+  });
+  const selfRects = [...selfEdgeCounts].map(([id, count]) => positions.get(id) && positions.get(id).x + nodeWidth + 16 + (count - 1) * 8);
+  const selfBottom = selfEdgeCounts.size ? Math.max(...[...positions.values()].map((rect) => rect.y + rect.height)) + 16 + margin : 0;
+  const routedHeight = Math.max(height + (routeLaneIndex ? 24 + (routeLaneIndex - 1) * 18 + margin : 0), selfBottom);
+  const maxSelfLane = Math.max(0, ...selfRects.filter(Number.isFinite));
+  const width = Math.max(margin * 2 + nodeWidth + maxLevel * stepX, rightmost + margin, maxSelfLane ? maxSelfLane + margin : 0, rightmost + (routeLaneIndex ? 16 + margin : 0));
+  return { positions, edges: laidOutEdges, width, height: routedHeight, nodeWidth, nodeHeight };
+}
+
 function actionText(value, limit = 4000) {
   if (!nonempty(value)) return undefined;
   return value.length <= limit ? value : value.slice(0, limit - 1).replace(/[\uD800-\uDBFF]$/u, '') + '…';
