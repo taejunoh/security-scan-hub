@@ -645,9 +645,17 @@ function drawDesktopDependencies() {
   const overviewHead = el('div', 'dependency-overview-head');
   const statusTitle = el('h3', '', t(graph.status === 'complete' ? 'Dependency graph complete' : graph.status === 'partial' ? 'Dependency graph partial' : 'Dependency graph unavailable'));
   statusTitle.id = 'dependency-status-title';
-  const graphMeta = el('p', 'dependency-meta', t('Graph count: {v0} packages · {v1} relationships · {v2}', {
-    v0: graph.totalNodes ?? 0, v1: graph.totalEdges ?? 0, v2: projectName(activeRun),
-  }));
+  const graphMeta = el('div', 'dependency-overview-meta');
+  const projectMeta = el('div', 'dependency-project-meta');
+  projectMeta.append(el('span', 'dependency-field-label', t('Project')), el('strong', 'dependency-project-name', projectName(activeRun)));
+  graphMeta.append(projectMeta);
+  const counts = el('div', 'dependency-counts');
+  for (const [label, value] of [['Packages', graph.totalNodes ?? 0], ['Relationships', graph.totalEdges ?? 0]]) {
+    const metric = el('div', 'dependency-count');
+    metric.append(el('span', 'dependency-field-label', t(label)), el('strong', '', String(value)));
+    counts.append(metric);
+  }
+  graphMeta.append(counts);
   overviewHead.append(statusTitle, graphMeta);
   graphStatus.append(overviewHead);
   if (!activeRun.dependencyGraph) graphStatus.append(el('p', 'dependency-state-note', t('Dependency graph not saved')));
@@ -655,14 +663,20 @@ function drawDesktopDependencies() {
   const coverage = el('details', 'dependency-coverage');
   coverage.append(el('summary', '', t('Scope and limitations')));
   const coverageBody = el('div', 'dependency-coverage-body');
-  coverageBody.append(el('p', '', t('Dependency Map scope')));
+  const scopeField = el('div', 'dependency-coverage-field');
+  scopeField.append(el('h4', '', t('Graph scope')), el('p', '', t('Dependency Map scope')));
+  coverageBody.append(scopeField);
   if (graph.lockfiles?.length) {
+    coverageBody.append(el('h4', 'dependency-coverage-label', t('Lockfiles')));
     const lockfiles = el('ul', 'dependency-lockfiles');
     lockfiles.setAttribute('aria-label', t('Lockfiles'));
     for (const file of graph.lockfiles) lockfiles.append(el('li', '', `${file.path} · ${t('Lockfile version')} ${file.lockfileVersion ?? t('Unknown')}`));
     coverageBody.append(lockfiles);
   }
-  for (const limitation of graph.limitations ?? []) coverageBody.append(el('p', 'dependency-notice', t(limitation)));
+  if (graph.limitations?.length) {
+    coverageBody.append(el('h4', 'dependency-coverage-label', t('Limitations')));
+    for (const limitation of graph.limitations) coverageBody.append(el('p', 'dependency-notice', t(limitation)));
+  }
   coverage.append(coverageBody);
   graphStatus.append(coverage);
   parent.append(graphStatus);
@@ -785,7 +799,11 @@ function drawDesktopDependencies() {
     dependencyListPage = graphPage.page;
     for (const node of graphPage.items) {
       const row = el('li');
-      const button = el('button', 'quiet-button', `${node.name}${node.version ? ` ${node.version}` : ''} · ${node.path ?? node.id}`);
+      const button = el('button', 'quiet-button dependency-package-row');
+      const packageName = el('span', 'dependency-row-name', node.name);
+      const packageVersion = el('span', 'dependency-row-version', node.version || t('Version not recorded'));
+      const packagePath = el('span', 'dependency-row-path mono', node.path ?? node.id);
+      button.append(packageName, packageVersion, packagePath);
       button.type = 'button'; button.setAttribute('aria-pressed', String(selectedDependencyId === node.id));
       button.addEventListener('click', () => { selectedDependencyId = node.id; dependencyRelationPage = { incoming: 1, outgoing: 1 }; dependencyDetailOpen = { incoming: false, outgoing: false, vulnerabilities: false }; drawDesktopDependencies(); parent.querySelector('.dependency-graph-list [aria-pressed="true"]')?.focus(); parent.querySelector('.dependency-detail')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }); });
       row.append(button); packageList.append(row);
@@ -796,11 +814,24 @@ function drawDesktopDependencies() {
     const selected = graph.allNodes.find((node) => node.id === selectedDependencyId);
     if (selected) {
       const detail = el('section', 'dependency-detail'); detail.setAttribute('aria-live', 'polite');
-      detail.append(el('h3', '', `${selected.name}${selected.version ? ` ${selected.version}` : ''}`));
-      if (selected.path) detail.append(el('p', 'mono', selected.path));
+      const packageHeading = el('div', 'dependency-detail-heading');
+      packageHeading.append(el('span', 'dependency-field-label', t('Package')), el('h3', '', selected.name));
+      detail.append(packageHeading);
+      const attributes = el('dl', 'dependency-detail-fields');
+      const versionField = el('div', 'dependency-detail-field');
+      versionField.append(el('dt', '', t('Version')), el('dd', '', selected.version || t('Version not recorded')));
+      attributes.append(versionField);
+      if (selected.path) {
+        const pathField = el('div', 'dependency-detail-field dependency-detail-path');
+        pathField.append(el('dt', '', t('Path')), el('dd', 'mono', selected.path));
+        attributes.append(pathField);
+      }
+      detail.append(attributes);
       const directIds = new Set(graph.allEdges.filter((edge) => edge.from === '.').map((edge) => edge.to));
       const hasIncoming = graph.allEdges.some((edge) => edge.to === selected.id);
-      detail.append(el('p', 'dependency-kind', t(directIds.has(selected.id) ? 'Direct dependency' : hasIncoming ? 'Transitive dependency' : 'No recorded parent relationship')));
+      const role = el('div', 'dependency-role-field');
+      role.append(el('span', 'dependency-field-label', t('Relationship role')), el('strong', 'dependency-kind', t(directIds.has(selected.id) ? 'Direct dependency' : hasIncoming ? 'Transitive dependency' : 'No recorded parent relationship')));
+      detail.append(role);
 
       const relationshipNames = {
         dependency: 'Dependency relationship', devDependency: 'Development dependency', optionalDependency: 'Optional dependency',
@@ -822,8 +853,11 @@ function drawDesktopDependencies() {
           const other = otherId === '.' ? graph.root : graph.allNodes.find((node) => node.id === otherId);
           if (!other) continue;
           const item = el('li');
-          const name = `${other.name}${other.version ? ` ${other.version}` : ''} · ${other.path ?? other.id}`;
-          const label = otherId === '.' ? el('span', 'dependency-relation-target', name) : el('button', 'quiet-button dependency-relation-target', name);
+          const label = otherId === '.' ? el('span', 'dependency-relation-target') : el('button', 'quiet-button dependency-relation-target');
+          const relationName = el('span', 'dependency-row-name', other.name);
+          const relationVersion = el('span', 'dependency-row-version', other.version || t('Version not recorded'));
+          const relationPath = el('span', 'dependency-row-path mono', other.path ?? other.id);
+          label.append(relationName, relationVersion, relationPath);
           if (otherId !== '.') {
             label.type = 'button';
             label.addEventListener('click', () => {
