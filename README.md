@@ -1,197 +1,108 @@
 # Security Scan Hub
 
-**Desktop prerelease 0.2.9 for Mac** fixes OSV Scanner detection when Finder
-metadata is present. Windows remains on prerelease 0.2.8. The app includes a Dependency Map and guided first-scan
-experience and the refreshed workbench. Download the notarized Mac
-packages or the unsigned portable Windows ZIP below. The Microsoft Store
-version is distributed separately and currently offers 0.2.5. The exact notarized Intel
-ZIP passed hosted Intel smoke; it was not tested on a physical user’s Mac.
+**Seven security tools. One place to review the results.**
 
-**Run seven security tools in a single scan. Review the results in one place.**
-Security Scan Hub combines dependency checks, AI skill scanning, code review,
-and URL checks in one report. See the findings and which tools completed,
-were skipped, or failed. Results are available as HTML, JSON, and SARIF.
+Security Scan Hub is a desktop app that brings together dependency checks,
+code reviews, and AI security scans. Scan a project's source folder, see which
+checks ran, and review findings and recommended next steps in one place.
+Reports are also available as HTML, JSON, and SARIF.
 
-**Desktop quick start.** [Choose your Mac or Windows download](#download-security-scan-hub-desktop)
-and run Google OSV Scanner without a terminal. To run multiple tools,
-select them in the app and click **Start scan**. The combined report opens
-automatically in the **Security Inbox**. An Apple silicon Mac can run all seven
-after setup. On Windows, the Cloudflare and Anthropic workflows are disabled.
-Follow the [desktop setup guide](desktop/README.md#run-a-multi-tool-scan).
-
-![Security Scan Hub first-use screen with choices to scan an app or try an example](docs/images/onboarding-welcome-en.png)
+![Security Scan Hub welcome screen](docs/images/onboarding-welcome-en.png)
 
 ## Seven integrations
 
-| Upstream project | What it checks |
+| Tool | What it does |
 | --- | --- |
 | [Google OSV Scanner](https://github.com/google/osv-scanner) | Finds known vulnerabilities in project dependencies. |
-| [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) | Scans AI agent skills for suspicious patterns in static mode. |
+| [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) | Checks AI agent skills for suspicious patterns. |
 | [OpenAI Codex Security](https://github.com/openai/codex-security) | Reviews source code for potential vulnerabilities. |
-| [Alibaba Open Code Review](https://github.com/alibaba/open-code-review) | Reviews repository code for security and correctness issues. |
-| [OpenAI PHP2Shell Checker](https://github.com/openai/php2shell-checker) | Checks the specified URL's response headers for signs of affected PHP versions. |
-| [Cloudflare Security Audit Skill](https://github.com/cloudflare/security-audit-skill) | Runs the upstream audit workflow through the Codex CLI. |
-| [Anthropic Defending Code Reference Harness](https://github.com/anthropics/defending-code-reference-harness) | Runs the upstream Claude Code `/vuln-scan` skill in static mode. |
+| [Alibaba Open Code Review](https://github.com/alibaba/open-code-review) | Reviews code for security and correctness issues. |
+| [OpenAI PHP2Shell Checker](https://github.com/openai/php2shell-checker) | Checks a supplied URL's headers for signs of affected PHP versions. |
+| [Cloudflare Security Audit Skill](https://github.com/cloudflare/security-audit-skill) | Runs a security audit workflow through Codex CLI. |
+| [Anthropic Defending Code Reference Harness](https://github.com/anthropics/defending-code-reference-harness) | Runs Claude Code's `/vuln-scan` skill in static mode. |
 
-Before installing or upgrading an integration, check the [verified CLI versions](src/adapters/SOURCES.md)
-and the [requirements for the Cloudflare and Anthropic workflows](docs/REFERENCE.md#official-security-skill-workflows).
-New upstream versions may change sign-in, command options, or report formats.
+OSV Scanner is included for a first scan. Other tools need separate setup;
+some require sign-in. AI scans are opt-in and may send code or context to their
+providers. Windows supports up to five integrations: the Cloudflare and
+Anthropic workflows are disabled. See [tool setup](desktop/README.md#run-a-multi-tool-scan).
 
-Install the upstream tools and adapt the [seven-tool configuration](examples/seven-tools.config.json)
-to your environment. AI workflows require explicit `--ai` opt-in and may send
-code or context to the configured provider. The PHP check uses the URL you supply.
-SkillSpector requires a target with a top-level `SKILL.md`. With the tools
-configured, select all seven in one command:
+## Install
 
-```sh
-node bin/sec-hub.mjs scan /path/to/project \
-  --tools osv,skillspector,codex-security,open-code-review,php2shell,cloudflare,anthropic \
-  --ai --config /path/to/sec-hub.config.json \
-  --url http://127.0.0.1:8080 --timeout 1200 --out ./sec-hub-runs
-```
+**Mac** — download the signed and notarized 0.2.9 prerelease for your Mac,
+extract the ZIP, and open **Security Scan Hub.app**:
 
-See the [CLI setup and technical reference](docs/REFERENCE.md) for tool
-requirements and execution limits. The [verification history](docs/HISTORY.md#031-source-and-seven-tool-validation)
-describes how results from the seven integrations were checked and combined.
+- [Apple silicon (M-series)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip)
+- [Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
 
-## Example scan
-
-![Security inbox with findings on the left and the selected advisory on the right](docs/images/security-inbox-wide.png)
-
-The screenshot shows the current desktop design with saved results from an
-OSV scan of the included example project. Its `lodash` 4.17.20 dependency had
-four findings, two high and two medium. The screenshot was captured from a
-development build and does not represent a scan of your own project.
-
-The inbox puts the highest severity findings first. Start with critical and
-high findings, and confirm whether candidates affect your project. Search by
-package, title, or advisory ID, or filter by severity.
-
-In 0.2.4, open a finding and look under **What to do next** for **Check first**
-and **Recommended action**. The guidance uses saved scanner evidence, such
-as an advisory's fixed version or code suggested by a tool. For PHP header
-warnings, it explains how to verify the installed version and patch status.
-When the saved result has no specific fix, it directs you to the evidence to
-review. Expand **Original evidence and metadata** for the full record.
-
-On narrow screens, findings open in a full-width detail view. **Back to
-results** restores the search, filters, scroll position, and keyboard focus.
-
-## Dependency Map
-
-![Dependency Map showing an npm project's direct and transitive packages](docs/images/dependency-map.png)
-
-After a new scan, open **Dependencies** to see the packages and relationships
-recorded in the project’s npm lockfile. Select a package to inspect its version,
-install path and matching findings; search and filter the list for larger maps.
-The map records the lockfile snapshot, not the live installed state.
-
-The initial map supports a project-root `package-lock.json` or
-`npm-shrinkwrap.json` with npm lockfile version 2 or 3. Other ecosystems and
-nested projects are not covered. Unresolved relationships, unsafe input and
-size limits are reported as partial or unavailable; older saved runs do not
-contain a map and need a new scan. Scanners can support more file formats than
-the map does.
-
-## Download Security Scan Hub Desktop
-
-Select several security tools, start one scan, and review findings and run
-status together in the **Security Inbox**. These versions are prereleases.
-
-### Install on Mac with Homebrew
-
-If you already use [Homebrew](https://brew.sh/), open Terminal and run:
+If you use [Homebrew](https://brew.sh/), you can install either Mac version
+from Terminal instead:
 
 ```sh
 brew install --cask taejunoh/tap/security-scan-hub
 ```
 
-Homebrew selects the Apple silicon or Intel download automatically. Open
-**Security Scan Hub** from Applications. To update later, run
-`brew upgrade --cask security-scan-hub`.
+To update later, run `brew upgrade --cask security-scan-hub`.
 
-### Install on Mac (Apple silicon)
+**Windows** — [install from Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
+or [download the 0.2.8 portable prerelease](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-win32-x64-prerelease.zip).
+For the portable version, extract the ZIP and open **Sec Hub.exe**; keep the
+files together. It is unsigned, so Windows may show an unknown publisher warning.
+The Store and portable releases are versioned separately.
 
-1. Download the Developer ID-signed and notarized package: [Mac 0.2.9 for Apple silicon](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip).
-2. In Finder, double-click the ZIP to extract it.
-3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
-
-The Apple silicon package supports M-series Macs and can run all seven
-integrations after setup.
-
-### Install on Mac (Intel)
-
-1. Download the signed and notarized Intel package: [Mac 0.2.9 for Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-x64-notarized-prerelease.zip).
-2. In Finder, double-click the ZIP to extract it.
-3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
-
-The Intel package bundles OSV Scanner for a first scan without Terminal and
-requires macOS 13 or later. The exact notarized ZIP passed packaged smoke on a
-hosted Intel Mac. This is not a hands-on test on a physical user Mac.
-
-### Install on Windows (x64)
-
-**For the 0.2.8 prerelease:** [Download the unsigned Windows x64 portable ZIP](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-win32-x64-prerelease.zip).
-In File Explorer, choose **Extract All**, then open **Sec Hub.exe** from the
-extracted folder. Keep the files together. Windows may show an unknown
-publisher warning because the ZIP is unsigned.
-
-The Microsoft Store currently offers 0.2.5. The 0.2.7 update is in
-Microsoft certification and is not yet published. [Open the current Store listing](https://apps.microsoft.com/detail/9NQQRS8WX1T7).
-The Store app bundles OSV Scanner and does not require a terminal, Node.js, or
-separate OSV account for a first scan.
-
-**Verified November 10, 2026:** Store installation, folder selection, a bundled
-OSV scan, and the results screen with recommended actions worked on Windows 11
-ARM in a virtual machine using x64 emulation. The saved HTML, JSON, and SARIF
-reports matched the scan results. This check covered OSV, not every integration
-or native Intel/AMD hardware.
-
-Up to five integrations are available after setup. The Cloudflare and
-Anthropic workflows are disabled on Windows. Other tools may need their own
-installation and provider sign-in.
-
-OSV Scanner is bundled on all three platforms. Other tools require setup, and AI
-tools require provider sign-in and consent. [Mac 0.2.9 release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.9)
-· [Windows 0.2.8 release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
-
-The earlier OSV-only [0.2.1 prerelease](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.1) is still
-available for users who need that version.
+[Full installation guide](docs/GETTING-STARTED.md) ·
+[Mac release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.9) ·
+[Windows release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
 
 ## Run your first scan
 
-1. To try the app without your own project, choose **Try an example**, then
-   **Start example scan**. The bundled OSV Scanner checks a small included
-   example; it does not run example code or check your own project.
-2. To scan your own code, choose **Scan my app**, select **Choose folder**,
-   and pick the folder containing your app's source and package files. Extract
-   a source ZIP first. Choose **Start basic scan**.
-3. When the scan finishes, review findings and **What to do next** in the
-   report. Use **View previous results** to reopen saved reports later.
+1. Choose **Try an example**, then **Start example scan** to explore the app
+   with its included sample. This does not scan your own project.
+2. To scan your project, choose **Scan my app** and select the folder containing
+   its source code and package files. If it is a ZIP, extract it first.
+3. Start the scan, then review the findings and **What to do next**. Choose
+   **View previous results** to reopen a saved report.
 
-A completed scan with no findings means OSV Scanner found no known
-vulnerabilities in the dependencies it checked. If the scan fails, check the
-error message and try again after resolving it.
+To run multiple configured tools together, see [Run a multi-tool scan](desktop/README.md#run-a-multi-tool-scan).
 
-To add more tools to the same scan, follow
-[Run a multi-tool scan](desktop/README.md#run-a-multi-tool-scan).
-[See the full setup and scan guide](docs/GETTING-STARTED.md).
+## Review results
 
-## How the desktop scan works
+![Security Inbox showing example findings and an advisory](docs/images/security-inbox-wide.png)
 
-**Choose a folder → Read the package list → Look up known vulnerabilities →
-Save the report**
+The **Security Inbox** groups findings in one place. Search or filter the list,
+open an item to inspect its evidence, and check its recommended action. The
+example above shows saved OSV results for the included sample, not your project.
 
-Electron provides the desktop window. The app starts the
-bundled Google OSV Scanner and saves its results for the app to display. You
-can run a scan without installing Node.js or creating an OSV account.
+A completed scan with no findings means the selected tools reported no issues
+in the scope they checked; it is not a guarantee that the project is secure.
 
-OSV Scanner needs internet access and may send package names and versions to
-its advisory and package metadata services. The results cover the supported
-dependency files that OSV checked.
+### Dependency Map
 
-## For developers
+![Dependency Map showing direct and transitive packages](docs/images/dependency-map.png)
 
-- [Sample report from a multi-tool CLI scan](docs/sample-report.html)
-- [Desktop build and packaging notes](desktop/README.md)
+Open **Dependencies** after a scan to explore package relationships and any
+matching saved findings. The map currently supports project-root npm
+`package-lock.json` and `npm-shrinkwrap.json` files in lockfile versions 2 or
+3. It represents the recorded lockfile, not the live installed state; missing
+or unsupported data is reported as partial or unavailable.
+
+## Requirements and limitations
+
+- OSV Scanner needs internet access and may send package names and versions
+  to advisory and package metadata services. PHP2Shell checks the supplied URL.
+- Additional tools may require installation, configuration, and provider
+  authentication. SkillSpector needs a target with a top-level `SKILL.md`.
+- Upstream updates can change commands, authentication, or report formats.
+  Check the [verified versions](src/adapters/SOURCES.md) and
+  [Cloudflare and Anthropic requirements](docs/REFERENCE.md#official-security-skill-workflows)
+  before upgrading an integration.
+- The notarized Intel ZIP passed smoke testing on a hosted Intel Mac; it was
+  not tested on a physical user's Mac. The Store's OSV scan and reports were
+  tested on Windows 11 ARM in a virtual machine using x64 emulation; that check
+  did not cover every integration or native Intel/AMD hardware.
+
+## More information
+
+- [Desktop setup and multi-tool scans](desktop/README.md)
+- [CLI setup and technical reference](docs/REFERENCE.md)
+- [Sample multi-tool report](docs/sample-report.html)
 - [Release and verification history](docs/HISTORY.md)
