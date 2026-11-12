@@ -28,11 +28,16 @@ Anthropic workflows are disabled. See [tool setup](desktop/README.md#run-a-multi
 
 ## Install
 
-**Mac** — download the signed and notarized 0.2.10 prerelease for your Mac,
+### <img src="docs/images/platforms/apple.svg" alt="" width="20" height="20"> macOS
+
+Download the signed and notarized 0.2.10 prerelease for your Mac,
 extract the ZIP, and open **Security Scan Hub.app**:
 
-- [Apple silicon (M-series)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-arm64-notarized-prerelease.zip)
-- [Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
+- [Mac with Apple silicon (M-series chip)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-arm64-notarized-prerelease.zip)
+- [Mac with Intel chip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
+
+Not sure which Mac you have? Open the Apple menu () and choose **About This
+Mac**. Look for an Apple M-series chip or an Intel processor.
 
 If you use [Homebrew](https://brew.sh/), you can install either Mac version
 from Terminal instead:
@@ -43,7 +48,9 @@ brew install --cask taejunoh/tap/security-scan-hub
 
 To update later, run `brew upgrade --cask security-scan-hub`.
 
-**Windows** — [install from Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
+### <img src="docs/images/platforms/windows.svg" alt="" width="20" height="20"> Windows
+
+[Install from Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
 or [download the 0.2.8 portable prerelease](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-win32-x64-prerelease.zip).
 For the portable version, extract the ZIP and open **Sec Hub.exe**; keep the
 files together. It is unsigned, so Windows may show an unknown publisher warning.
