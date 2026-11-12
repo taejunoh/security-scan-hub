@@ -46,6 +46,8 @@ button, input, select { color: inherit; font: inherit; }
 button, select, summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+/* Programmatic focus on page landmarks and headings announces the new view. */
+:is(main, h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus-visible { outline: none; }
 
 .skip-link {
   position: absolute;
