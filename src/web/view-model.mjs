@@ -124,6 +124,11 @@ export function dependencyGraphView(graph, { query = '', scope = 'all', graphLim
 }
 
 export function layoutDependencyGraph(graph, { nodeWidth = 190, nodeHeight = 48, columnGap = 82, rowGap = 28, margin = 28 } = {}) {
+  const markerLength = 8;
+  const markerPath = `M 0 0 L ${markerLength} ${markerLength / 2} L 0 ${markerLength}`;
+  const arrowTipGap = 2.15;
+  const terminalLength = markerLength + 1;
+  const routedColumnGap = Math.max(columnGap, markerLength + 24);
   const nodes = asArray(graph?.nodes).filter((node) => typeof node?.id === 'string' && node.id !== '.');
   const edges = asArray(graph?.edges).filter((edge) => typeof edge?.from === 'string' && typeof edge?.to === 'string');
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -155,7 +160,7 @@ export function layoutDependencyGraph(graph, { nodeWidth = 190, nodeHeight = 48,
   const maxRows = Math.max(1, ...[...levels.values()].map((items) => items.length));
   const height = margin * 2 + maxRows * rowStep - rowGap;
   const positions = new Map();
-  const stepX = nodeWidth + columnGap;
+  const stepX = nodeWidth + routedColumnGap;
   for (const [level, items] of levels) {
     items.forEach((node, index) => positions.set(node.id, { x: margin + level * stepX, y: margin + index * rowStep, width: nodeWidth, height: nodeHeight, level }));
   }
@@ -177,8 +182,6 @@ export function layoutDependencyGraph(graph, { nodeWidth = 190, nodeHeight = 48,
   const outgoingOffsets = new Map(); const incomingOffsets = new Map();
   for (const [id, indices] of outgoing) outgoingOffsets.set(id, edgeOffsets(indices, (edge) => edge.to));
   for (const [id, indices] of incoming) incomingOffsets.set(id, edgeOffsets(indices, (edge) => edge.from));
-  const allNodeRects = [...positions.values()];
-  const rightmost = Math.max(...allNodeRects.map((rect) => rect.x + rect.width));
   const selfEdgeCounts = new Map();
   for (const edge of includedEdges) if (edge.from === edge.to) selfEdgeCounts.set(edge.from, (selfEdgeCounts.get(edge.from) ?? 0) + 1);
   const selfEdgeOffsets = new Map();
@@ -191,39 +194,42 @@ export function layoutDependencyGraph(graph, { nodeWidth = 190, nodeHeight = 48,
     if (edge.from === edge.to) {
       const edgeOrdinal = selfEdgeOffsets.get(edge.from) ?? 0;
       selfEdgeOffsets.set(edge.from, edgeOrdinal + 1);
-      const lane = from.x + nodeWidth + 16 + edgeOrdinal * 8;
-      start = { x: from.x + nodeWidth, y: from.y + nodeHeight / 2 };
-      end = { x: from.x + nodeWidth, y: from.y + nodeHeight };
-      controls = [{ x: lane, y: start.y }, { x: lane, y: end.y + 16 }];
-      path = `M ${start.x} ${start.y} H ${lane} V ${end.y + 16} H ${end.x} V ${end.y}`;
+      const edgeCount = selfEdgeCounts.get(edge.from) ?? 1;
+      const spread = edgeCount < 2 ? 0 : (edgeOrdinal / (edgeCount - 1) - .5) * Math.min(16, nodeHeight / 3);
+      const right = from.x + nodeWidth;
+      const lane = right + markerLength + 8;
+      start = { x: right, y: from.y + nodeHeight / 2 - 8 + spread };
+      end = { x: right + arrowTipGap, y: from.y + nodeHeight / 2 + 8 + spread };
+      controls = [{ x: lane, y: start.y }, { x: lane, y: end.y }, { x: end.x + terminalLength, y: end.y }];
+      path = `M ${start.x} ${start.y} H ${lane} V ${end.y} H ${controls[2].x} H ${end.x}`;
     } else if (to.level === from.level + 1) {
       start = { x: from.x + nodeWidth, y: sourceY };
-      end = { x: to.x, y: targetY };
-      const middle = (start.x + end.x) / 2;
-      controls = [{ x: middle, y: start.y }, { x: middle, y: end.y }];
-      path = `M ${start.x} ${start.y} C ${controls[0].x} ${controls[0].y}, ${controls[1].x} ${controls[1].y}, ${end.x} ${end.y}`;
+      end = { x: to.x - arrowTipGap, y: targetY };
+      const gap = end.x - start.x;
+      const approachX = end.x - terminalLength;
+      controls = [{ x: start.x + Math.max(12, gap * .32), y: start.y }, { x: approachX - 4, y: end.y }, { x: approachX, y: end.y }];
+      path = `M ${start.x} ${start.y} C ${controls[0].x} ${controls[0].y}, ${controls[1].x} ${controls[1].y}, ${approachX} ${end.y} H ${end.x}`;
     } else if (to.level > from.level) {
       const lane = height + 24 + routeLaneIndex++ * 18;
       start = { x: from.x + nodeWidth, y: sourceY };
-      end = { x: to.x, y: targetY };
-      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x - 16, y: lane }, { x: end.x - 16, y: end.y }];
+      end = { x: to.x - arrowTipGap, y: targetY };
+      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x - terminalLength, y: lane }, { x: end.x - terminalLength, y: end.y }];
       path = `M ${start.x} ${start.y} H ${controls[0].x} V ${lane} H ${controls[2].x} V ${end.y} H ${end.x}`;
     } else {
       const lane = height + 24 + routeLaneIndex++ * 18;
       start = { x: from.x + nodeWidth, y: sourceY };
-      end = { x: to.x + nodeWidth, y: targetY };
-      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x + 16, y: lane }, { x: end.x + 16, y: end.y }];
+      end = { x: to.x + nodeWidth + arrowTipGap, y: targetY };
+      controls = [{ x: start.x + 16, y: start.y }, { x: start.x + 16, y: lane }, { x: end.x + terminalLength, y: lane }, { x: end.x + terminalLength, y: end.y }];
       path = `M ${start.x} ${start.y} H ${controls[0].x} V ${lane} H ${controls[2].x} V ${end.y} H ${end.x}`;
     }
     const route = edge.from === edge.to ? 'self' : to.level === from.level + 1 ? 'forward' : to.level > from.level ? 'skip' : 'back';
     return { ...edge, start, end, controls, path, route };
   });
-  const selfRects = [...selfEdgeCounts].map(([id, count]) => positions.get(id) && positions.get(id).x + nodeWidth + 16 + (count - 1) * 8);
-  const selfBottom = selfEdgeCounts.size ? Math.max(...[...positions.values()].map((rect) => rect.y + rect.height)) + 16 + margin : 0;
-  const routedHeight = Math.max(height + (routeLaneIndex ? 24 + (routeLaneIndex - 1) * 18 + margin : 0), selfBottom);
-  const maxSelfLane = Math.max(0, ...selfRects.filter(Number.isFinite));
-  const width = Math.max(margin * 2 + nodeWidth + maxLevel * stepX, rightmost + margin, maxSelfLane ? maxSelfLane + margin : 0, rightmost + (routeLaneIndex ? 16 + margin : 0));
-  return { positions, edges: laidOutEdges, width, height: routedHeight, nodeWidth, nodeHeight };
+  const rightmost = Math.max(...[...positions.values()].map((rect) => rect.x + rect.width));
+  const hasRightRoute = [...selfEdgeCounts.values()].some(Boolean) || laidOutEdges.some((edge) => edge.route === 'back');
+  const routedHeight = Math.max(height + (routeLaneIndex ? 24 + (routeLaneIndex - 1) * 18 + margin : 0), height);
+  const width = Math.max(margin * 2 + nodeWidth + maxLevel * stepX, rightmost + margin + (hasRightRoute ? markerLength + 8 : 0));
+  return { positions, edges: laidOutEdges, width, height: routedHeight, nodeWidth, nodeHeight, columnGap: routedColumnGap, markerLength, markerPath, arrowTipGap };
 }
 
 function actionText(value, limit = 4000) {

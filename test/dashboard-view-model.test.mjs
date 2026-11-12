@@ -428,21 +428,31 @@ test('dependency graph layout attaches forward, cycle, self and parallel edges w
     assert.ok(edge.controls.every(inside), 'all path control points fit in the scroll viewBox');
     assert.ok(edge.path.startsWith(`M ${edge.start.x} ${edge.start.y}`));
     assert.deepEqual(svgPathEnd(edge.path), edge.end, 'SVG path endpoint equals the returned node boundary anchor');
+    assert.ok(edge.end.y - layout.markerLength / 2 >= 0, 'open chevron stays inside the viewBox above the endpoint');
+    assert.ok(edge.end.y + layout.markerLength / 2 <= layout.height, 'open chevron stays inside the viewBox below the endpoint');
     if (edge.route === 'forward') {
       assert.equal(edge.start.x, from.x + layout.nodeWidth, 'forward edge starts on source right boundary');
-      assert.equal(edge.end.x, to.x, 'forward edge ends on target left boundary');
+      assert.equal(edge.end.x, to.x - layout.arrowTipGap, 'forward marker tip leaves a small gap before the target border');
+      assert.ok(edge.end.x - edge.controls.at(-1).x >= layout.markerLength + 1, 'forward edge has a short straight approach for its marker');
+      assert.ok(edge.controls.at(-1).x < edge.end.x, 'forward chevron points right into the target');
     } else if (edge.route === 'back') {
       assert.equal(edge.start.x, from.x + layout.nodeWidth, 'back edge starts on source right boundary');
-      assert.equal(edge.end.x, to.x + layout.nodeWidth, 'back edge ends on target right boundary');
+      assert.equal(edge.end.x, to.x + layout.nodeWidth + layout.arrowTipGap, 'back marker tip leaves a small gap beyond the target border');
+      assert.ok(edge.end.x + layout.markerLength + 1 <= edge.controls.at(-1).x, 'back edge has a short straight approach for its left-pointing marker');
+      assert.ok(edge.controls.at(-1).x > edge.end.x, 'back chevron points left into the target');
       assert.ok(edge.controls.some((point) => point.y > Math.max(from.y, to.y) + layout.nodeHeight), 'cycle edge takes a distinct outside lane');
     } else if (edge.route === 'skip') {
       assert.equal(edge.start.x, from.x + layout.nodeWidth);
-      assert.equal(edge.end.x, to.x);
+      assert.equal(edge.end.x, to.x - layout.arrowTipGap);
+      assert.ok(edge.end.x - edge.controls.at(-1).x >= layout.markerLength + 1);
+      assert.ok(edge.controls.at(-1).x < edge.end.x, 'skip-level chevron points right into the target');
       assert.ok(edge.controls.some((point) => point.y > Math.max(from.y, to.y) + layout.nodeHeight), 'skip-level edge routes around intervening columns');
     } else {
       assert.equal(edge.start.x, from.x + layout.nodeWidth);
-      assert.equal(edge.end.y, from.y + layout.nodeHeight, 'self edge returns to source bottom boundary');
-      assert.ok(edge.controls.some((point) => point.x > from.x + layout.nodeWidth && point.y > from.y + layout.nodeHeight));
+      assert.equal(edge.end.x, from.x + layout.nodeWidth + layout.arrowTipGap, 'self edge points back into the node with a small border gap');
+      assert.ok(edge.end.x + layout.markerLength + 1 <= edge.controls.at(-1).x, 'self edge has a short terminal segment for its marker');
+      assert.ok(edge.controls.at(-1).x > edge.end.x, 'self-edge chevron points left back into the node');
+      assert.ok(edge.controls.every((point) => point.x > from.x + layout.nodeWidth), 'self edge stays outside the node and returns at its right border');
     }
   }
   const parallel = layout.edges.filter((edge) => edge.from === nodes[1].id && edge.to === nodes[2].id);
@@ -468,10 +478,38 @@ test('compact dependency layout fits a three-package chain without shrinking its
       { from: nodes[2].id, to: nodes[3].id, kind: 'dependency' },
     ], lockfiles: [], limitations: [],
   });
-  const compact = layoutDependencyGraph(graph, { nodeWidth: 138, nodeHeight: 44, columnGap: 18, rowGap: 16, margin: 18 });
-  assert.equal(compact.width, 642);
-  assert.ok(compact.width <= 672, 'three package levels fit beside a compact detail panel');
-  assert.equal(compact.positions.get(nodes[3].id).x, 486);
+  const compact = layoutDependencyGraph(graph, { nodeWidth: 138, nodeHeight: 44, columnGap: 42, rowGap: 16, margin: 18 });
+  assert.equal(compact.width, 714);
+  assert.ok(compact.width <= 720, 'three package levels keep readable spacing and fit a moderate desktop view');
+  assert.equal(compact.positions.get(nodes[3].id).x, 558);
+  assert.ok(compact.columnGap >= compact.markerLength + 2, 'adjacent columns leave enough room for a smooth edge and arrowhead');
+});
+
+test('dependency map direct branches use smooth curves and spaced open chevrons at compact size', () => {
+  const nodes = [
+    { id: '.', name: 'application', path: '.', kind: 'project' },
+    { id: 'node_modules/debug', name: 'debug', version: '4.4.0', path: 'node_modules/debug', kind: 'package' },
+    { id: 'node_modules/lodash', name: 'lodash', version: '4.17.21', path: 'node_modules/lodash', kind: 'package' },
+  ];
+  const graph = { nodes, edges: [
+    { from: '.', to: nodes[1].id, kind: 'direct', relationship: 'dependency' },
+    { from: '.', to: nodes[2].id, kind: 'direct', relationship: 'dependency' },
+  ] };
+  const layout = layoutDependencyGraph(graph, { nodeWidth: 138, nodeHeight: 44, columnGap: 42, rowGap: 16, margin: 18 });
+  assert.equal(layout.markerLength, 8, 'map arrows use a legible chevron marker');
+  assert.equal(layout.markerPath, 'M 0 0 L 8 4 L 0 8', 'marker is a two-stroke open chevron with its tip on the path endpoint');
+  assert.ok(Math.abs(layout.arrowTipGap - (2.5 + 1.8) / 2) < 1e-9, 'marker tip meets the selected border without covering it');
+  assert.equal(layout.edges.length, 2);
+  for (const edge of layout.edges) {
+    const source = layout.positions.get(edge.from);
+    const target = layout.positions.get(edge.to);
+    assert.equal(edge.route, 'forward');
+    assert.equal(edge.start.x, source.x + source.width);
+    assert.equal(edge.end.x, target.x - layout.arrowTipGap);
+    assert.ok(edge.end.x - edge.controls.at(-1).x >= 6, 'arrowhead gets a short straight approach');
+    assert.match(edge.path, / H [\d.]+$/, 'curve ends in an explicit horizontal segment');
+  }
+  assert.ok(layout.edges[0].start.y !== layout.edges[0].end.y || layout.edges[1].start.y !== layout.edges[1].end.y, 'root branches curve toward the separate target rows');
 });
 
 test('a run with a dependency graph can open Dependency Map when it has no reported vulnerabilities', () => {

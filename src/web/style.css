@@ -1014,11 +1014,10 @@ html[lang="ko"] .dependency-scope { word-break: keep-all; overflow-wrap: anywher
 .dependency-graph-compact .dependency-node text, .dependency-graph-compact .dependency-root text { font-size: 11px; }
 .dependency-graph-compact .dependency-node-version { font-size: 9px !important; }
 .dependency-scroll-hint { margin: .25rem .2rem .45rem; color: var(--muted); font-size: .8rem; }
-.dependency-edge { fill: none; stroke: #91a9ca; stroke-width: 2; }
-.dependency-edge-transitive { stroke: #6583ab; }
+.dependency-edge { fill: none; stroke: #526f95; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .dependency-edge-route-back, .dependency-edge-route-skip { stroke-dasharray: 4 3; }
 .dependency-edge-type-workspaceLink, .dependency-edge-type-workspaceMember { stroke: #8c6cb3; stroke-dasharray: 5 4; }
-.dependency-arrow { fill: #526f95; }
+.dependency-arrow { fill: none; stroke: #526f95; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .dependency-root rect, .dependency-node rect { fill: #fff; stroke: #7692b7; stroke-width: 1.5; }
 .dependency-root text, .dependency-node text { fill: #183354; font: 600 12px system-ui, sans-serif; }
 .dependency-node { cursor: pointer; outline: none; }
@@ -1026,8 +1025,7 @@ html[lang="ko"] .dependency-scope { word-break: keep-all; overflow-wrap: anywher
 .dependency-node-version { fill: #526981 !important; font-size: 10px !important; font-weight: 400 !important; }
 .dependency-workspace-node rect { stroke-dasharray: 4 3; }
 .dependency-legend { display: flex; flex-wrap: wrap; gap: .25rem .9rem; margin: .35rem 0 .5rem; padding: 0; list-style: none; color: var(--muted); font-size: .8rem; }
-.dependency-legend li::before { display: inline-block; width: 1.1rem; margin-inline-end: .4rem; border-top: 2px solid #91a9ca; content: ''; vertical-align: middle; }
-.dependency-legend .legend-transitive::before { border-top-color: #6583ab; }
+.dependency-legend li::before { display: inline-block; width: 1.1rem; margin-inline-end: .4rem; border-top: 2px solid #526f95; content: ''; vertical-align: middle; }
 .dependency-legend .legend-workspace::before { border-top: 2px dashed #8c6cb3; }
 .dependency-graph-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: .4rem .75rem; margin: .75rem 0; padding: 0; list-style: none; }
 .dependency-graph-list .quiet-button { width: 100%; min-height: 48px; text-align: start; overflow-wrap: anywhere; }

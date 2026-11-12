@@ -724,7 +724,7 @@ function drawDesktopDependencies() {
       if (compactGraph) svg.classList.add('dependency-graph-compact');
       svg.setAttribute('role', 'group');
       svg.setAttribute('aria-label', t('Dependency graph accessible label'));
-      const layout = layoutDependencyGraph(graph, compactGraph ? { nodeWidth: 138, nodeHeight: 44, columnGap: 18, rowGap: 16, margin: 18 } : {});
+      const layout = layoutDependencyGraph(graph, compactGraph ? { nodeWidth: 138, nodeHeight: 44, columnGap: 42, rowGap: 16, margin: 18 } : {});
       svg.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
       svg.setAttribute('width', String(layout.width));
       svg.setAttribute('height', String(layout.height));
@@ -732,11 +732,14 @@ function drawDesktopDependencies() {
       svg.style.height = `${layout.height}px`;
       const defs = document.createElementNS(svgNS, 'defs');
       const marker = document.createElementNS(svgNS, 'marker');
-      marker.id = 'dependency-arrow'; marker.setAttribute('viewBox', '0 0 8 8'); marker.setAttribute('refX', '8'); marker.setAttribute('refY', '4');
-      marker.setAttribute('markerWidth', '8'); marker.setAttribute('markerHeight', '8'); marker.setAttribute('markerUnits', 'userSpaceOnUse'); marker.setAttribute('orient', 'auto');
-      const arrow = document.createElementNS(svgNS, 'path'); arrow.setAttribute('d', 'M 0 0 L 8 4 L 0 8 Z'); arrow.setAttribute('class', 'dependency-arrow'); marker.append(arrow); defs.append(marker); svg.append(defs);
+      const markerSize = layout.markerLength;
+      marker.id = 'dependency-arrow'; marker.setAttribute('viewBox', `-1 -1 ${markerSize + 2} ${markerSize + 2}`); marker.setAttribute('refX', String(markerSize)); marker.setAttribute('refY', String(markerSize / 2));
+      marker.setAttribute('markerWidth', String(markerSize + 2)); marker.setAttribute('markerHeight', String(markerSize + 2)); marker.setAttribute('markerUnits', 'userSpaceOnUse'); marker.setAttribute('orient', 'auto');
+      const arrow = document.createElementNS(svgNS, 'path'); arrow.setAttribute('d', layout.markerPath); arrow.setAttribute('class', 'dependency-arrow'); marker.append(arrow); defs.append(marker); svg.append(defs);
       const directIds = new Set(graph.allEdges.filter((edge) => edge.from === '.').map((edge) => edge.to));
       const incomingIds = new Set(graph.allEdges.map((edge) => edge.to));
+      const edgeLayer = document.createElementNS(svgNS, 'g');
+      edgeLayer.setAttribute('class', 'dependency-edge-layer');
       for (const edge of layout.edges) {
         const line = document.createElementNS(svgNS, 'path');
         line.setAttribute('d', edge.path);
@@ -746,7 +749,7 @@ function drawDesktopDependencies() {
         const edgeTitle = document.createElementNS(svgNS, 'title');
         edgeTitle.textContent = edge.relationship === 'workspaceLink' || edge.relationship === 'workspaceMember' ? t('Workspace dependency') : edge.relationship === 'peerDependency' ? t('Peer dependency') : t(edge.kind === 'direct' ? 'Direct dependency' : 'Transitive dependency');
         line.append(edgeTitle);
-        svg.append(line);
+        edgeLayer.append(line);
       }
       const rootGroup = document.createElementNS(svgNS, 'g');
       rootGroup.setAttribute('class', 'dependency-root');
@@ -773,6 +776,7 @@ function drawDesktopDependencies() {
         group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(); } });
         svg.append(group);
       }
+      svg.append(edgeLayer);
       const scroll = el('div', 'dependency-graph-scroll');
       scroll.append(svg);
       mapMain.append(scroll);
