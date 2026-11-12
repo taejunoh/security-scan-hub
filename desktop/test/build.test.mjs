@@ -183,6 +183,20 @@ async function fixtureInventory(root, prefix = '') {
   return files;
 }
 
+test('Mac archive preserves a current app creation and modification date without invalidating the signature', { skip: process.platform !== 'darwin' }, async t => {
+  const { execFileSync } = await import('node:child_process');
+  const { stat } = await import('node:fs/promises');
+  const { dir, application } = await signedMacFixture(t);
+  execFileSync('/usr/bin/xcrun', ['SetFile', '-d', '01/01/1980 00:00:00', application]);
+  const now = new Date();
+  await build.setMacBundleDate(application, now);
+  const result = await build.packAndVerify({ application, archive: path.join(dir, 'date.zip'), target: hostTarget, expectedFiles: await fixtureInventory(application) });
+  t.after(() => rm(result.directory, { recursive: true, force: true }));
+  const actual = await stat(result.application);
+  assert.ok(Math.abs(actual.birthtimeMs - now.getTime()) < 5000, `birthtime: ${actual.birthtime}`);
+  assert.ok(Math.abs(actual.mtimeMs - now.getTime()) < 5000, `mtime: ${actual.mtime}`);
+});
+
 test('Finder metadata on the app root does not hide the scanner, but tampering remains rejected', { skip: process.platform !== 'darwin' }, async t => {
   const { execFileSync } = await import('node:child_process');
   const { verifyMacApplication } = await import('../app/tools.mjs');

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { access, chmod, copyFile, cp, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, cp, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -175,6 +175,12 @@ async function extractArchive(archive, destination) {
 async function packMac(application, archive) {
   await run('/usr/bin/ditto', ['-c', '-k', '--rsrc', '--extattr', '--acl', '--qtn', '--sequesterRsrc', '--keepParent', application, archive]);
 }
+export async function setMacBundleDate(application, date = new Date()) {
+  const pad = n => String(n).padStart(2, '0');
+  const value = `${pad(date.getMonth()+1)}/${pad(date.getDate())}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  await utimes(application, date, date);
+  await run('/usr/bin/xcrun', ['SetFile', '-d', value, application]);
+}
 function canBuildIntelOnAppleSilicon(target, allowMacCrossArch) {
   return allowMacCrossArch === true && hostTarget === 'darwin-arm64' && target === 'darwin-x64';
 }
@@ -186,6 +192,10 @@ export async function packAndVerify({ application, archive, target, expectedFile
   try {
     await extractArchive(archive, directory);
     const layout = platformLayout(directory, target);
+    if (macArchitectures.has(target)) {
+      const sourceDate = await stat(application); const extractedDate = await stat(layout.application);
+      if (Math.abs(sourceDate.birthtimeMs - extractedDate.birthtimeMs) > 2000 || Math.abs(sourceDate.mtimeMs - extractedDate.mtimeMs) > 2000) throw new Error('Extracted app dates differ from the packaged app');
+    }
     const files = await inventory(layout.application);
     if (json(files) !== json(expectedFiles)) throw new Error('Extracted archive inventory differs from the final signed file inventory');
     // This is verification only: never strip metadata or re-sign extracted bytes.
@@ -540,6 +550,7 @@ async function buildPackage({ target, out, cache, allowDirty, macSignIdentity, n
       signing.notarized = Boolean(notarization);
       if (notarization) signing.notarization = notarization;
     }
+    if (macArchitectures.has(target)) await setMacBundleDate(layout.application);
     const finalSource = await gitState();
     if (finalSource.commit !== source.commit || finalSource.status !== source.status) throw new Error('Source checkout changed during packaging; rebuild from frozen source');
     const files = await inventory(layout.application);
