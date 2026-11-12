@@ -183,6 +183,24 @@ async function fixtureInventory(root, prefix = '') {
   return files;
 }
 
+test('Finder metadata on the app root does not hide the scanner, but tampering remains rejected', { skip: process.platform !== 'darwin' }, async t => {
+  const { execFileSync } = await import('node:child_process');
+  const { verifyMacApplication } = await import('../app/tools.mjs');
+  const { application } = await signedMacFixture(t);
+  const requirement = '=identifier "org.sechub.archive-fixture"';
+  execFileSync('/usr/bin/xattr', ['-wx', 'com.apple.FinderInfo', '0000000000000000200000000000000000000000000000000000000000000000', application]);
+  await verifyMacApplication(application, requirement);
+  assert.match(execFileSync('/usr/bin/xattr', [application], { encoding: 'utf8' }), /com.apple.FinderInfo/);
+  const inner = path.join(application, 'Contents/Resources/preserved.txt');
+  execFileSync('/usr/bin/xattr', ['-wx', 'com.apple.FinderInfo', '0000000000000000200000000000000000000000000000000000000000000000', inner]);
+  const old = process.env.DITTONORSRC; process.env.DITTONORSRC = '1';
+  try { await assert.rejects(verifyMacApplication(application, requirement)); }
+  finally { if (old === undefined) delete process.env.DITTONORSRC; else process.env.DITTONORSRC = old; }
+  execFileSync('/usr/bin/xattr', ['-d', 'com.apple.FinderInfo', inner]);
+  await writeFile(path.join(application, 'Contents/Resources/preserved.txt'), 'tampered');
+  await assert.rejects(verifyMacApplication(application, requirement));
+});
+
 test('the actual packing and fresh extraction gate preserves quarantine and unrelated metadata', { skip: process.platform !== 'darwin' }, async t => {
   assert.equal(typeof build.packAndVerify, 'function', 'the distributable archive must be roundtrip verified');
   const { execFileSync } = await import('node:child_process');

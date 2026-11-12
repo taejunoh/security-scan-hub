@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readFile, realpath } from 'node:fs/promises';
+import { lstat, mkdtemp, open, readFile, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -23,6 +24,28 @@ function unchangedFile(before, after) {
     before.mtimeNs === after.mtimeNs && before.ctimeNs === after.ctimeNs;
 }
 
+export async function verifyMacApplication(application, requirement, receiptPath) {
+  const options = { timeout: 30_000 };
+  const strict = async target => execute('/usr/bin/codesign', ['--verify', '--strict', '-R', requirement, target], options);
+  try { await strict(application); return null; } catch (originalError) {
+    // Only retry when the app root has Finder metadata. Preserve all other
+    // metadata in the private copy so strict validation still checks it.
+    try { await execute('/usr/bin/xattr', ['-p', 'com.apple.FinderInfo', application], options); }
+    catch { throw originalError; }
+    const temporary = await mkdtemp(join(tmpdir(), 'sechub-signature-'));
+    const copy = join(temporary, 'application.app');
+    try {
+      await execute('/usr/bin/codesign', ['--verify', '--strict=symlinks', '-R', requirement, application], options);
+      await execute('/usr/bin/ditto', ['--rsrc', '--extattr', '--acl', '--qtn', application, copy], options);
+      await execute('/usr/bin/xattr', ['-d', 'com.apple.FinderInfo', copy], options);
+      await strict(copy);
+      const copiedReceipt = receiptPath ? await readFile(join(copy, receiptPath)) : null;
+      await execute('/usr/bin/codesign', ['--verify', '--strict=symlinks', '-R', requirement, application], options);
+      return copiedReceipt;
+    } finally { await rm(temporary, { recursive: true, force: true }); }
+  }
+}
+
 async function macBuildMetadata(contents, resources) {
   const filename = join(resources, 'desktop-build.json');
   let receipt;
@@ -34,7 +57,8 @@ async function macBuildMetadata(contents, resources) {
   try {
     const before = await receipt.stat({ bigint: true });
     if (!before.isFile() || before.size > 1024n * 1024n) throw new Error('Invalid desktop build receipt');
-    const metadata = JSON.parse(await receipt.readFile('utf8'));
+    const receiptBytes = await receipt.readFile();
+    const metadata = JSON.parse(receiptBytes.toString('utf8'));
     if (metadata?.signing?.kind !== 'developer-id') return null;
 
     // Authenticate the receipt against the outer seal of this running app.
@@ -44,7 +68,8 @@ async function macBuildMetadata(contents, resources) {
     const cdhash = (signature.stdout + signature.stderr).match(/^CDHash=([a-f0-9]{40})$/m)?.[1];
     if (!cdhash) throw new Error('Unable to identify the running application signature');
     const requirement = `=identifier "org.sechub.desktop" and anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and cdhash H"${cdhash}"`;
-    await execute('/usr/bin/codesign', ['--verify', '--strict', '-R', requirement, dirname(contents)], options);
+    const copiedReceipt = await verifyMacApplication(dirname(contents), requirement, 'Contents/Resources/desktop-build.json');
+    if (copiedReceipt && !receiptBytes.equals(copiedReceipt)) throw new Error('Desktop build receipt differs from verified copy');
 
     if (!unchangedFile(before, await receipt.stat({ bigint: true })) ||
         !unchangedFile(before, await lstat(filename, { bigint: true }))) throw new Error('Desktop build receipt changed during verification');
@@ -88,7 +113,7 @@ export async function verifiedOSV(resources) {
     const hash = createHash('sha256');
     for await (const data of handle.createReadStream({ autoClose: false, end: expected.size - 1 })) hash.update(data);
     const after = await handle.stat({ bigint: true });
-    if (!unchangedFile(before, after)) return null;
+    if (!unchangedFile(before, after) || !unchangedFile(before, await lstat(candidate, { bigint: true }))) return null;
     return hash.digest('hex') === expected.sha256 ? candidate : null;
   } catch { return null; }
   finally { await handle?.close(); }
