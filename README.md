@@ -30,11 +30,11 @@ Anthropic workflows are disabled. See [tool setup](desktop/README.md#run-a-multi
 
 ### <img src="docs/images/platforms/apple.svg" alt="" width="20" height="20"> macOS
 
-Download the signed and notarized 0.2.10 prerelease for your Mac,
+Download the signed and notarized 0.2.11 prerelease for your Mac,
 extract the ZIP, and open **Security Scan Hub.app**:
 
-- [Mac with Apple silicon (M-series chip)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-arm64-notarized-prerelease.zip)
-- [Mac with Intel chip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.10/sec-hub-desktop-0.2.10-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
+- [Mac with Apple silicon (M-series chip)](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.11/sec-hub-desktop-0.2.11-darwin-arm64-notarized-prerelease.zip)
+- [Mac with Intel chip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.11/sec-hub-desktop-0.2.11-darwin-x64-notarized-prerelease.zip) — requires macOS 13 or later
 
 Not sure which Mac you have? Open the Apple menu () and choose **About This
 Mac**. Look for an Apple M-series chip or an Intel processor.
@@ -51,14 +51,14 @@ To update later, run `brew upgrade --cask security-scan-hub`.
 ### <img src="docs/images/platforms/windows.svg" alt="" width="20" height="20"> Windows
 
 [Install from Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
-or [download the 0.2.8 portable prerelease](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-win32-x64-prerelease.zip).
+or [download the 0.2.11 portable prerelease](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.11/sec-hub-desktop-0.2.11-win32-x64-prerelease.zip).
 For the portable version, extract the ZIP and open **Sec Hub.exe**; keep the
 files together. It is unsigned, so Windows may show an unknown publisher warning.
 The Store and portable releases are versioned separately.
 
 [Full installation guide](docs/GETTING-STARTED.md) ·
-[Mac release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.10) ·
-[Windows release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
+[Mac release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.11) ·
+[Windows release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.11)
 
 ## Run your first scan
 
