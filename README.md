@@ -13,13 +13,13 @@ Reports are also available as HTML, JSON, and SARIF.
 
 | Tool | What it does |
 | --- | --- |
-| [Google OSV Scanner](https://github.com/google/osv-scanner) | Finds known vulnerabilities in project dependencies. |
-| [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) | Checks AI agent skills for suspicious patterns. |
-| [OpenAI Codex Security](https://github.com/openai/codex-security) | Reviews source code for potential vulnerabilities. |
-| [Alibaba Open Code Review](https://github.com/alibaba/open-code-review) | Reviews code for security and correctness issues. |
-| [OpenAI PHP2Shell Checker](https://github.com/openai/php2shell-checker) | Checks a supplied URL's headers for signs of affected PHP versions. |
-| [Cloudflare Security Audit Skill](https://github.com/cloudflare/security-audit-skill) | Runs a security audit workflow through Codex CLI. |
-| [Anthropic Defending Code Reference Harness](https://github.com/anthropics/defending-code-reference-harness) | Runs Claude Code's `/vuln-scan` skill in static mode. |
+| <img src="docs/images/integrations/google.svg" alt="" width="18" height="18"> [Google OSV Scanner](https://github.com/google/osv-scanner) | Finds known vulnerabilities in project dependencies. |
+| <img src="docs/images/integrations/nvidia.svg" alt="" width="18" height="18"> [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) | Checks AI agent skills for suspicious patterns. |
+| <img src="docs/images/integrations/openai.svg" alt="" width="18" height="18"> [OpenAI Codex Security](https://github.com/openai/codex-security) | Reviews source code for potential vulnerabilities. |
+| <img src="docs/images/integrations/alibabadotcom.svg" alt="" width="18" height="18"> [Alibaba Open Code Review](https://github.com/alibaba/open-code-review) | Reviews code for security and correctness issues. |
+| <img src="docs/images/integrations/openai.svg" alt="" width="18" height="18"> [OpenAI PHP2Shell Checker](https://github.com/openai/php2shell-checker) | Checks a supplied URL's headers for signs of affected PHP versions. |
+| <img src="docs/images/integrations/cloudflare.svg" alt="" width="18" height="18"> [Cloudflare Security Audit Skill](https://github.com/cloudflare/security-audit-skill) | Runs a security audit workflow through Codex CLI. |
+| <img src="docs/images/integrations/anthropic.svg" alt="" width="18" height="18"> [Anthropic Defending Code Reference Harness](https://github.com/anthropics/defending-code-reference-harness) | Runs Claude Code's `/vuln-scan` skill in static mode. |
 
 OSV Scanner is included for a first scan. Other tools need separate setup;
 some require sign-in. AI scans are opt-in and may send code or context to their
