@@ -27,6 +27,11 @@ and is not yet published.
 
 The app window is titled **Security Scan Hub**.
 
+If you already use Homebrew on a Mac, you can instead run
+`brew install --cask taejunoh/tap/security-scan-hub` in Terminal. Homebrew
+selects the package for your Mac; open **Security Scan Hub** from Applications
+after installation.
+
 The Intel package requires macOS 13 or later. You can also scan from Terminal and
 view the report in a browser. [Intel Mac Terminal fallback](#intel-mac-scan-from-terminal)
 

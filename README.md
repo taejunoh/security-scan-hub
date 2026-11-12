@@ -98,6 +98,18 @@ the map does.
 Select several security tools, start one scan, and review findings and run
 status together in the **Security Inbox**. These versions are prereleases.
 
+### Install on Mac with Homebrew
+
+If you already use [Homebrew](https://brew.sh/), open Terminal and run:
+
+```sh
+brew install --cask taejunoh/tap/security-scan-hub
+```
+
+Homebrew selects the Apple silicon or Intel download automatically. Open
+**Security Scan Hub** from Applications. To update later, run
+`brew upgrade --cask security-scan-hub`.
+
 ### Install on Mac (Apple silicon)
 
 1. Download the Developer ID-signed and notarized package: [Mac 0.2.9 for Apple silicon](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip).
