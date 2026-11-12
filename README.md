@@ -1,6 +1,7 @@
 # Security Scan Hub
 
-**Desktop prerelease 0.2.8** adds a Dependency Map to the guided first-scan
+**Desktop prerelease 0.2.9 for Mac** fixes OSV Scanner detection when Finder
+metadata is present. Windows remains on prerelease 0.2.8. The app includes a Dependency Map and guided first-scan
 experience and the refreshed workbench. Download the notarized Mac
 packages or the unsigned portable Windows ZIP below. The Microsoft Store
 version is distributed separately and currently offers 0.2.5. The exact notarized Intel
@@ -11,7 +12,7 @@ Security Scan Hub combines dependency checks, AI skill scanning, code review,
 and URL checks in one report. See the findings and which tools completed,
 were skipped, or failed. Results are available as HTML, JSON, and SARIF.
 
-**Desktop quick start.** [Choose your Mac or Windows download](#download-security-scan-hub-desktop-028)
+**Desktop quick start.** [Choose your Mac or Windows download](#download-security-scan-hub-desktop)
 and run Google OSV Scanner without a terminal. To run multiple tools,
 select them in the app and click **Start scan**. The combined report opens
 automatically in the **Security Inbox**. An Apple silicon Mac can run all seven
@@ -92,14 +93,14 @@ size limits are reported as partial or unavailable; older saved runs do not
 contain a map and need a new scan. Scanners can support more file formats than
 the map does.
 
-## Download Security Scan Hub Desktop 0.2.8
+## Download Security Scan Hub Desktop
 
 Select several security tools, start one scan, and review findings and run
-status together in the **Security Inbox**. Version 0.2.8 is a prerelease.
+status together in the **Security Inbox**. These versions are prereleases.
 
 ### Install on Mac (Apple silicon)
 
-1. Download the Developer ID-signed and notarized package: [sec-hub-desktop-0.2.8-darwin-arm64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-darwin-arm64-notarized-prerelease.zip).
+1. Download the Developer ID-signed and notarized package: [Mac 0.2.9 for Apple silicon](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip).
 2. In Finder, double-click the ZIP to extract it.
 3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
 
@@ -108,7 +109,7 @@ integrations after setup.
 
 ### Install on Mac (Intel)
 
-1. Download the signed and notarized Intel package: [sec-hub-desktop-0.2.8-darwin-x64-notarized-prerelease.zip](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-darwin-x64-notarized-prerelease.zip).
+1. Download the signed and notarized Intel package: [Mac 0.2.9 for Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-x64-notarized-prerelease.zip).
 2. In Finder, double-click the ZIP to extract it.
 3. Open **Security Scan Hub.app**. The app window is titled **Security Scan Hub**.
 
@@ -139,13 +140,13 @@ Anthropic workflows are disabled on Windows. Other tools may need their own
 installation and provider sign-in.
 
 OSV Scanner is bundled on all three platforms. Other tools require setup, and AI
-tools require provider sign-in and consent. [Browse all 0.2.8 release assets](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
-· [Verify ZIP checksums](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-SHA256SUMS.txt)
+tools require provider sign-in and consent. [Mac 0.2.9 release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.9)
+· [Windows 0.2.8 release and checksums](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
 
 The earlier OSV-only [0.2.1 prerelease](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.1) is still
 available for users who need that version.
 
-## Run your first scan with 0.2.8
+## Run your first scan
 
 1. To try the app without your own project, choose **Try an example**, then
    **Start example scan**. The bundled OSV Scanner checks a small included

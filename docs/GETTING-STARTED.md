@@ -1,24 +1,24 @@
 # Getting started with Security Scan Hub Desktop
 
-This guide covers the **0.2.8 desktop prerelease**, which adds a guided first
+This guide covers the **0.2.9 Mac and 0.2.8 Windows desktop prereleases**, which include a guided first
 scan and an example scan. The Mac packages are notarized; the portable Windows
 package is unsigned. [Read the platform validation record](FIRST-SCAN-VALIDATION.md).
 
 ## 1. Download and open the app
 
-Download 0.2.8 for the guided first-scan experience. The Microsoft Store
+Download 0.2.9 for Mac or 0.2.8 for Windows. The Microsoft Store
 currently offers 0.2.5. The 0.2.7 update is in Microsoft certification
 and is not yet published.
-[GitHub 0.2.8 release page](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
+[Mac 0.2.9 release](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.9) · [Windows 0.2.8 release](https://github.com/taejunoh/security-scan-hub/releases/tag/desktop-v0.2.8)
 
 - **Mac with Apple silicon (M-series).**
   In Finder, double-click the downloaded ZIP. Then double-click **Security Scan Hub.app**
-  (Finder may display it as **Security Scan Hub**). [Download `sec-hub-desktop-0.2.8-darwin-arm64-notarized-prerelease.zip`](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-darwin-arm64-notarized-prerelease.zip)
+  (Finder may display it as **Security Scan Hub**). [Download Mac 0.2.9 for Apple silicon](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-arm64-notarized-prerelease.zip)
 - **Intel Mac (x64).** In Finder, double-click the downloaded ZIP to extract
   it, then double-click **Security Scan Hub.app**. The Intel package bundles OSV Scanner,
   so the first scan runs in the app without Terminal. The exact notarized ZIP
   passed packaged smoke on a hosted Intel Mac; this is not a physical user Mac
-  test. [Download `sec-hub-desktop-0.2.8-darwin-x64-notarized-prerelease.zip`](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-darwin-x64-notarized-prerelease.zip)
+  test. [Download Mac 0.2.9 for Intel](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-darwin-x64-notarized-prerelease.zip)
 - **Windows x64 (Intel or AMD).** Download and extract the unsigned portable
   package, then open **Sec Hub.exe** in the extracted folder. Keep the files
   together. [Download `sec-hub-desktop-0.2.8-win32-x64-prerelease.zip`](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-win32-x64-prerelease.zip)
@@ -37,11 +37,11 @@ not contain the ready-to-run app.
 The app includes its runtime and OSV Scanner. You can run your first OSV scan
 as soon as you open the app.
 
-To verify a download, use the release's [SHA-256 checksums](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-SHA256SUMS.txt).
+To verify a download, use the checksums for [Mac 0.2.9](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.9/sec-hub-desktop-0.2.9-SHA256SUMS.txt) or [Windows 0.2.8](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.8/sec-hub-desktop-0.2.8-SHA256SUMS.txt).
 
 ## 2. Run your first scan
 
-On the 0.2.8 welcome screen, choose **Try an example** and then **Start
+On the welcome screen, choose **Try an example** and then **Start
 example scan** to explore a report without your own source code. The example
 uses the bundled OSV Scanner, does not run example code, and is marked as an
 example rather than a scan of your project. Package names and versions are sent
