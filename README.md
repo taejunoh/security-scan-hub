@@ -52,6 +52,7 @@ To update later, run `brew upgrade --cask security-scan-hub`.
 
 [Install from Microsoft Store](https://apps.microsoft.com/detail/9NQQRS8WX1T7)
 or [download the 0.2.11 portable prerelease](https://github.com/taejunoh/security-scan-hub/releases/download/desktop-v0.2.11/sec-hub-desktop-0.2.11-win32-x64-prerelease.zip).
+The Microsoft Store currently offers version 0.2.7; version 0.2.11 is under review.
 For the portable version, extract the ZIP and open **Sec Hub.exe**; keep the
 files together. It is unsigned, so Windows may show an unknown publisher warning.
 The Store and portable releases are versioned separately.
